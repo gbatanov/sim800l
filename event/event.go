@@ -1,6 +1,7 @@
 package event
 
 import (
+	"errors"
 	"log"
 	"time"
 )
@@ -24,14 +25,14 @@ func EventEmitterCreate() *EventEmitter {
 	return &evEmitter
 }
 
-// Create empty event with Id = id
+// Создаем пустое событие с идентификатором id
 func (em *EventEmitter) CreateEvent(id string) *Event {
 	event := Event{Id: id, Message: ""}
 	em.Events = append(em.Events, &event)
 	return &event
 }
 
-// Find event in emitter, if not finded< create empty
+// Ищем событие по идентификатору, если еще нет, создае новое
 func (em *EventEmitter) GetEvent(id string) *Event {
 	for _, ev := range em.Events {
 		if ev.Id == id {
@@ -41,33 +42,35 @@ func (em *EventEmitter) GetEvent(id string) *Event {
 	return em.CreateEvent(id)
 }
 
-// When a message arrives from the modem, id - command, msg - message
+// Устанавливаем событие, id - код команды, msg - сообщение
 func (em *EventEmitter) SetEvent(id string, msg string) {
 	event := em.GetEvent(id)
 	event.Message = msg
 }
 
-// Call before waiting
+// Очищаем событие перед ожиданием ответа
 func (em *EventEmitter) ResetEvent(id string) {
 	event := em.GetEvent(id)
 	event.Message = ""
 }
 
-// wait for a message with a given identifier
-func (em *EventEmitter) WaitEvent(id string, timeout time.Duration) string {
+// ждем сообщения с заданным идентификатором
+// Здесь мы ожидаем ответ на отправленные нами команды
+// Неинициированные нами команды не порождают событие, обрабатываются своим обработчиком
+func (em *EventEmitter) WaitEvent(id string, timeout time.Duration) (string, error) {
 	event := em.GetEvent(id)
 	if event.Message != "" {
-		return event.Message
+		return event.Message, nil
 	}
 	timer1 := time.NewTimer(timeout)
 	for {
 		select {
 		case <-timer1.C:
 			timer1.Stop()
-			return ""
+			return "", errors.New("Timeout")
 		default:
 			if event.Message != "" {
-				return event.Message
+				return event.Message, nil
 			}
 		}
 		time.Sleep(time.Millisecond * 100)

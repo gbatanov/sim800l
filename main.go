@@ -7,30 +7,35 @@ import (
 	"time"
 )
 
-const VERSION = "0.0.2"
+const VERSION = "0.1.2"
 
 func main() {
 	log.Println("Start")
 	em := event.EventEmitterCreate()
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		em.ResetEvent("AT")
-		result := em.WaitEvent("AT", time.Second*10)
-		log.Println(result)
-		wg.Done()
-	}()
-	wg.Add(1)
-	go func() {
-		em.ResetEvent("AT+")
-		result := em.WaitEvent("AT+", time.Second*3)
-		log.Println(result)
-		wg.Done()
-	}()
+	cmds := []string{"AT", "AT+", "AT-"}
+	for _, cmd := range cmds {
+		wg.Add(1)
+		go sendCmd(em, cmd, &wg)
+	}
+
 	time.Sleep(time.Second * 1)
 	em.SetEvent("AT+", "OK+")
+	em.SetEvent("AT-", "OK-")
 	time.Sleep(time.Second * 5)
 	em.SetEvent("AT", "OK")
 	wg.Wait()
 	log.Println("End")
+}
+
+func sendCmd(em *event.EventEmitter, cmd string, wg *sync.WaitGroup) {
+	em.ResetEvent(cmd)
+	// Тут типа отправляем команду и начинаемждать ответ
+	result, err := em.WaitEvent(cmd, time.Second*3)
+	if err == nil {
+		log.Println(result)
+	} else {
+		log.Println(err.Error())
+	}
+	wg.Done()
 }

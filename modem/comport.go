@@ -84,19 +84,26 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 				u.Flag = false
 			}
 		} else if err == nil && n > 0 {
-			BufReadResult = append(BufReadResult, BufRead[:n]...)
-			k += n
-			log.Printf("1.Received: %v \n", BufReadResult[:k])
+			/*
+				if BufRead[0] == '>' {
+					cmdinput <- BufRead[:n]
+					BufReadResult = make([]byte, 0)
+					k = 0
+				} else */{
+				BufReadResult = append(BufReadResult, BufRead[:n]...)
+				k += n
+				log.Printf("1.Received: %v \n", BufReadResult[:k])
 
-			cnt := strings.Count(string(BufReadResult[:k]), "\r\n")
-			if cnt > 1 {
-				log.Printf("2.Received: %v \n", BufReadResult[:k])
-				cmdinput <- BufReadResult[:k]
-				BufReadResult = make([]byte, 0)
-				k = 0
+				cnt := strings.Count(string(BufReadResult[:k]), "\r\n")
+				if cnt > 1 {
+					log.Printf("2.Received: %v \n", BufReadResult[:k])
+					cmdinput <- BufReadResult[:k]
+					BufReadResult = make([]byte, 0)
+					k = 0
+				}
 			}
 			// if there is no command, wait 1 sec
-			time.Sleep(2 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 		for i := 0; i < n; i++ {
 			BufRead[i] = 0

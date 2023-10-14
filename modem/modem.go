@@ -1,6 +1,7 @@
 package modem
 
 import (
+	"fmt"
 	"gsm/event"
 	"log"
 	"strconv"
@@ -57,12 +58,15 @@ func (mdm *GsmModem) Open(baud int) error {
 				answer := string(buff)
 				parts := strings.Split(answer, "\r\r\n")
 				//
-				mdm.em.SetEvent(parts[0], parts[1])
 				log.Printf("Answer on command: %s %s ", parts[0], parts[1])
 				if strings.HasPrefix(parts[1], "+CMGR") { // Прочитано смс-сообщение
 					go func(msg string) {
 						mdm.handleSms(msg)
 					}(answer)
+				} else if strings.HasPrefix(parts[1], "+CMGS") { // Передано смс-сообщение
+					mdm.em.SetEvent(parts[0]+"\r", "OK")
+				} else {
+					mdm.em.SetEvent(parts[0]+"\r", parts[1])
 				}
 			} else if strings.HasPrefix(string(buff), "\r\n+") { //+CMTI, +CLIP, +CUSD, +CMGR
 				answer := string(buff[2:])
@@ -109,44 +113,46 @@ func (mdm *GsmModem) InitModem() {
 	mdm.sendCommand("AT\r", "OK")
 	mdm.setEcho(true)
 	mdm.setAon()
-	mdm.sendCommand("AT+CMGF=1\r", "AT+CMGF")
-	mdm.sendCommand("AT+DDET=1,0,0\r", "AT+DDET")
-	mdm.sendCommand("AT+CMGD=1,4\r", "AT+CMGD") // Удаление всех сообщений, второй вариант
-	mdm.sendCommand("AT+COLP=1\r", "AT+COLP")
+	mdm.sendCommand("AT+CMGF=1\r", "OK")
+	mdm.sendCommand("AT+DDET=1,0,0\r", "OK")
+	mdm.sendCommand("AT+CMGD=1,4\r", "OK") // Удаление всех сообщений, второй вариант
+	mdm.sendCommand("AT+COLP=1\r", "OK")
+	log.Println("Модем инициализирован")
 }
 
 func (mdm *GsmModem) setEcho(echo bool) bool {
-	cmd := "ATE"
+	res := true
 	if echo {
-		cmd = cmd + "1\r"
+		res, _ = mdm.sendCommand("ATE1\r", "ATE1")
 	} else {
-		cmd = cmd + "0\r"
+		res, _ = mdm.sendCommand("ATE0\r", "ATE0")
 	}
-	res, _ := mdm.sendCommand(cmd, "ATE")
 	return res
 }
 
 func (mdm *GsmModem) setAon() bool {
 	cmd := "AT+CLIP=1\r"
-	res, _ := mdm.sendCommand(cmd, "AT+CLIP")
+	res, _ := mdm.sendCommand(cmd, "OK")
 	return res
 }
 
 // Синхронные команды
 func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
-	log.Println("Send command ", cmd)
+	log.Printf("Send command %s", cmd)
 	err := mdm.uart.Write([]byte(cmd))
 	if err != nil {
 		return false, err
 	}
-	result, err := mdm.em.WaitEvent(cmd, time.Second*5)
-
+	result, err := mdm.em.WaitEvent(cmd, time.Second*15)
+	log.Println("Result1:" + result)
 	if err != nil {
 		return false, err
 	}
-	log.Println("Result:" + result)
-	waitAnswer = cmd + "\r\n" + waitAnswer + "\r\n;"
-
+	log.Println("Result2:" + result)
+	waitAnswer = waitAnswer + "\r\n"
+	if result == waitAnswer {
+		log.Println("Result3: Ответ совпал")
+	}
 	return result == waitAnswer, nil
 }
 
@@ -235,6 +241,89 @@ func (mdm *GsmModem) handleSms(msg string) uint16 {
 		//	  execute_tone_command(answer);
 	}
 	// AT+CMGD=1,4
-	mdm.sendCommand("AT+CMGD=1,4\r", "AT+CMGD") // Удаление всех сообщений, второй вариант
+	mdm.sendCommand("AT+CMGD=1,4\r", "OK") // Удаление всех сообщений, второй вариант
 	return uint16(cmdCode)
+}
+
+// AT+CMGS="+70250109365"         >                       Отправка СМС на номер (в кавычках), после кавычек передаем LF (13)
+//>Water leak 1                  +CMGS: 15               Модуль ответит >, передаем сообщение, в конце передаем символ SUB (26)
+//                                OK
+//  Если в сообщении есть кириллица, нужно сменить текстовый режим на UCS2
+//  и перекодировать сообщение
+
+func (mdm *GsmModem) SendSms(sms string) bool {
+
+	cmd := ""
+	res := true
+
+	cmd = "AT+CMGF=0\r"
+	res, _ = mdm.sendCommand(cmd, "OK")
+
+	sms = mdm.convertSms(sms)
+	txtLen := len(sms) / 2
+	msgLen := txtLen + 14
+	buff := fmt.Sprintf("%02X", txtLen)
+	//
+	// 00 - Длина и номер SMS центра. 0 - означает, что будет использоваться дефолтный номер.
+	// 11 - SMS-SUBMIT
+	// 00 - Длина и номер отправителя. 0 - означает что будет использоваться дефолтный номер.
+	// 0B - Длина номера получателя (11 цифр)
+	// 91 - Тип-адреса. (91 указывает международный формат телефонного номера, 81 - местный формат).
+	//
+	// 9752109063F5 - Телефонный номер получателя в международном формате. (Пары цифр переставлены местами, если номер с нечетным количеством цифр, добавляется F) 79250109365 -> 9752109063F5
+	// 00 - Идентификатор протокола
+	// 08 - Старший полубайт означает сохранять SMS у получателя или нет (Flash SMS),  Младший полубайт - кодировка(0-латиница 8-кирилица).
+	// C1 - Срок доставки сообщения. С1 - неделя
+	// 46 - Длина текста сообщения
+	// Далее само сообщение в кодировке UCS2 (35 символов кириллицы, 70 байт, 2 байта на символ)
+
+	msg := "0011000B91" + "9752109063F5" + "0008C1"
+	msg = msg + buff + sms
+
+	buff = fmt.Sprintf("%02X", msgLen)
+
+	cmd = "AT+CMGS=" + strconv.Itoa(msgLen) + "\r"
+	res, _ = mdm.sendCommand(cmd, "> ") //62 32
+
+	//+ std::string("46")+ std::string("043F0440043804320435044200200445043004310440002C0020044D0442043E00200442043504410442043E0432043E043500200441043E043E043104490435043D04380435");
+	//                                  043F0440043804320435044200200445043004310440002C0020044D0442043E00200442043504410442043E0432043E043500200441043E043E043104490435043D04380435//
+	cmdByte := []byte(msg)
+	cmdByte = append(cmdByte, 0x1A)
+	msg = string(cmdByte)
+	res, _ = mdm.sendCommand(msg, "OK")
+	cmd = "AT+CMGF=1\r"
+	mdm.sendCommand(cmd, "OK")
+	if res {
+		log.Println("Сообщение отправлено")
+	}
+	return res
+}
+
+// Перекодировка кириллицы
+// ёЁ Ё(0xd0 0x81) 0401 ё(0xd1 0x91) 0451
+func (mdm *GsmModem) convertSms(msg string) string {
+
+	result := ""
+	msgBytes := []byte(msg)
+	log.Printf("%v", msgBytes)
+	for i := 0; i < len(msgBytes); i++ {
+		sym := msgBytes[i]
+
+		if sym == 0xD0 { //208
+			result = result + "04"
+			i++
+			sym = msgBytes[i] - 0x80
+		} else if sym == 0xD1 { //209
+			result = result + "04"
+			i++
+			sym = msgBytes[i] - 0x40
+		} else {
+			result = result + "00"
+		}
+
+		symHex := fmt.Sprintf("%02x", sym)
+		result = result + symHex
+	}
+	log.Println(result)
+	return result
 }

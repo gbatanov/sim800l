@@ -3,12 +3,14 @@ package modem
 import (
 	"gsm/event"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 )
 
 const RX_BUFFER_SIZE = 1024
 const TX_BUFFER_SIZE = 256
+const MY_PHONE_NUMBER = "9250109365"
 
 var CmdInput chan []byte = make(chan []byte, 256)
 
@@ -54,15 +56,28 @@ func (mdm *GsmModem) Open(baud int) error {
 			if strings.Contains(string(buff), "\r\r\n") { // Ответ на команду
 				answer := string(buff)
 				parts := strings.Split(answer, "\r\r\n")
+				//
 				mdm.em.SetEvent(parts[0], parts[1])
 				log.Printf("Answer on command: %s %s ", parts[0], parts[1])
-
-			} else if strings.HasPrefix(string(buff), "\r\n+") { //+CMTI, +CLIP, +CUSD,
+				if strings.HasPrefix(parts[1], "+CMGR") { // Прочитано смс-сообщение
+					go func(msg string) {
+						mdm.handleSms(msg)
+					}(answer)
+				}
+			} else if strings.HasPrefix(string(buff), "\r\n+") { //+CMTI, +CLIP, +CUSD, +CMGR
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)
-				if strings.HasPrefix(answer, "+CUSD") {
+				if strings.HasPrefix(answer, "+CUSD") { // ответ на запрос баланса
 					go func(msg string) {
 						mdm.showBalance(msg)
+					}(answer)
+				} else if strings.HasPrefix(answer, "+CMTI") { // Пришло смс-сообщение
+					go func(msg string) {
+						mdm.readSms(msg)
+					}(answer)
+				} else if strings.HasPrefix(answer, "+CMGR") { // Прочитано смс-сообщение
+					go func(msg string) {
+						mdm.handleSms(msg)
 					}(answer)
 				}
 			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+79250109365",145,"",0,"",0)
@@ -117,6 +132,7 @@ func (mdm *GsmModem) setAon() bool {
 	return res
 }
 
+// Синхронные команды
 func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 	log.Println("Send command ", cmd)
 	err := mdm.uart.Write([]byte(cmd))
@@ -133,19 +149,24 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 
 	return result == waitAnswer, nil
 }
+
+// Асинхронные команды
+func (mdm *GsmModem) sendCommandNoWait(cmd string) bool {
+	log.Println("Send command without waiting", cmd)
+	err := mdm.uart.Write([]byte(cmd))
+
+	return err == nil
+}
+
+// сам запрос баланса синхронный, асинхронный ответ придет с +CUSD
 func (mdm *GsmModem) GetBalance() bool {
-	res, _ := mdm.sendCommand("AT+CMGF=1\r", "AT+CMGF")
+	mdm.sendCommand("AT+CMGF=1\r", "AT+CMGF")
 	cmd := "AT+CUSD=1,\"*100#\"\r"
-	res, _ = mdm.sendCommand(cmd, "AT+CUSD")
+	res, _ := mdm.sendCommand(cmd, "OK")
 	return res
 }
 
-func (mdm *GsmModem) ShowBalance() {
-	msg := "+CUSD: 0, \"00380033002E0037003300200440002E000A041F04400438043700200434043E00200035003000200030003000300440002004320020041E04410435043D043D04350439002004120438043A0442043E04400438043D043500200434043E002000320032002E0031003000200437043000200032003000200440002F04340020002A0038003000350023\", 72"
-	mdm.showBalance(msg)
-}
-
-// +CUSD: 0, "00380033002E0037003300200440002E000A041F04400438043700200434043E00200035003000200030003000300440002004320020041E04410435043D043D04350439002004120438043A0442043E04400438043D043500200434043E002000320032002E0031003000200437043000200032003000200440002F04340020002A0038003000350023", 72
+// Проверено только для абонентов Мегафона
 func (mdm *GsmModem) showBalance(msg string) {
 	pos := strings.Index(msg, "\"")
 	res := string([]byte(msg)[pos+1:])
@@ -171,4 +192,49 @@ func (mdm *GsmModem) showBalance(msg string) {
 		}
 		}
 	*/
+}
+
+// Тут еще не сама смс, а уведомление о ее поступлении и номером в буфере.
+// Нужно отправить команду на чтение по этому номеру из буфера сообщений.
+//
+//	CMTI: "SM",4\r\n
+//
+// (Получено СМС сообщение)  +CMTI: "SM",4 Уведомление о приходе СМС.
+//
+//	Второй параметр - номер пришедшего сообщения
+func (mdm *GsmModem) readSms(msg string) {
+	pos := strings.Index(msg, ",")
+	answer := string([]byte(msg[pos+1:]))
+	log.Println(answer)
+	answer = strings.ReplaceAll(answer, "\r\n", "")
+	log.Println(answer)
+	num_sms, _ := strconv.Atoi(answer)
+	if num_sms > 0 {
+		cmd := "AT+CMGR=" + answer + "\r"
+		mdm.sendCommandNoWait(cmd)
+	}
+}
+
+// ||CMGR: "REC UNREAD","+70250109365","","22/09/03,12:42:54+12"||test 5||||OK||
+// ||+CMGR: "REC UNREAD","+79050109365","","23/06/08,17:32:30+12"||/cmnd401||||OK||
+func (mdm *GsmModem) handleSms(msg string) uint16 {
+	// принимаю команды пока только со своего телефона
+	log.Printf("SMS: %s \n", msg)
+	cmdCode := 0
+	if strings.Index(msg, "7"+MY_PHONE_NUMBER) != -1 && strings.Index(msg, "/cmnd") != -1 {
+		// answer = gsbstring::remove_before(answer, "/cmnd");
+		pos := strings.Index(msg, "/cmnd")
+		answer := string([]byte(msg)[pos+5:])
+		log.Printf("SMS2: %s \n", answer)
+		// answer = gsbstring::remove_after(answer, "||||");
+		pos = strings.Index(answer, "\r\n\r\n")
+		answer = string([]byte(answer)[:pos])
+		log.Printf("SMS3: %s \n", answer)
+		answer = strings.ReplaceAll(answer, " ", "")
+		cmdCode, _ = strconv.Atoi(answer)
+		//	  execute_tone_command(answer);
+	}
+	// AT+CMGD=1,4
+	mdm.sendCommand("AT+CMGD=1,4\r", "AT+CMGD") // Удаление всех сообщений, второй вариант
+	return uint16(cmdCode)
 }

@@ -44,13 +44,6 @@ func (u *Uart) Open(baud int) error {
 
 // Opening the given port
 func (u Uart) openPort(baud int) (*serial.Port, error) {
-
-	// bitrate for linux (checked!) - 115200 230400 460800 500000 576000
-	// bitrate fo Mac - 115200 only!
-
-	//	if u.os == "darwin" {
-	//		baud = 115200
-	//	}
 	c := &serial.Config{Name: u.port, Baud: baud, ReadTimeout: time.Second * 3}
 	return serial.OpenPort(c)
 

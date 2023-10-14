@@ -14,7 +14,7 @@ import (
 	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.2.3"
+const VERSION = "0.2.4"
 const PORT = "/dev/tty.usbserial-A50285BI"
 
 func main() {
@@ -40,7 +40,7 @@ func main() {
 	if Flag {
 		mdm := modem.GsmModemCreate(PORT, oss)
 		err := mdm.Open(9600)
-
+		//		var err error = nil
 		if err == nil {
 			defer mdm.Stop()
 			var wg sync.WaitGroup
@@ -54,6 +54,9 @@ func main() {
 						switch []byte(text)[0] {
 						case 'q':
 							Flag = false
+						case 'b':
+							mdm.GetBalance()
+							// mdm.ShowBalance()
 						} //switch
 					} else {
 						time.Sleep(time.Second * 3)

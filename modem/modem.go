@@ -60,6 +60,11 @@ func (mdm *GsmModem) Open(baud int) error {
 			} else if strings.HasPrefix(string(buff), "\r\n+") { //+CMTI, +CLIP, +CUSD,
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)
+				if strings.HasPrefix(answer, "+CUSD") {
+					go func(msg string) {
+						mdm.showBalance(msg)
+					}(answer)
+				}
 			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+79250109365",145,"",0,"",0)
 				// можно поделить на две "нормальных" команды - если подряд идут \r\n\r\n, по этому месту делим на две команды
 				answer := string(buff[2:])
@@ -127,4 +132,43 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 	waitAnswer = cmd + "\r\n" + waitAnswer + "\r\n;"
 
 	return result == waitAnswer, nil
+}
+func (mdm *GsmModem) GetBalance() bool {
+	res, _ := mdm.sendCommand("AT+CMGF=1\r", "AT+CMGF")
+	cmd := "AT+CUSD=1,\"*100#\"\r"
+	res, _ = mdm.sendCommand(cmd, "AT+CUSD")
+	return res
+}
+
+func (mdm *GsmModem) ShowBalance() {
+	msg := "+CUSD: 0, \"00380033002E0037003300200440002E000A041F04400438043700200434043E00200035003000200030003000300440002004320020041E04410435043D043D04350439002004120438043A0442043E04400438043D043500200434043E002000320032002E0031003000200437043000200032003000200440002F04340020002A0038003000350023\", 72"
+	mdm.showBalance(msg)
+}
+
+// +CUSD: 0, "00380033002E0037003300200440002E000A041F04400438043700200434043E00200035003000200030003000300440002004320020041E04410435043D043D04350439002004120438043A0442043E04400438043D043500200434043E002000320032002E0031003000200437043000200032003000200440002F04340020002A0038003000350023", 72
+func (mdm *GsmModem) showBalance(msg string) {
+	pos := strings.Index(msg, "\"")
+	res := string([]byte(msg)[pos+1:])
+	pos2 := strings.Index(res, "00200440002E")
+	res = string([]byte(res)[:pos2])
+	log.Printf("Balance1: %s\n", res)
+	res = strings.Replace(res, "003", "", -1) // -1 - all
+	log.Printf("Balance2: %s\n", res)
+	res = strings.Replace(res, "002E", ".", -1)
+	log.Printf("Balance: %s\n", res)
+	/*
+		balance_ = res
+		// отправляем баланс в телеграм
+		if (app->withTlg)
+		 app->tlg32->send_message("Баланс: " + res + " руб.");
+
+		// если была команда запроса баланса с тонового набора
+		if (balance_to_sms)
+		{
+		  // отправляем баланс в смс
+		  send_sms("Balance " + res + " rub");
+		  balance_to_sms = false;
+		}
+		}
+	*/
 }

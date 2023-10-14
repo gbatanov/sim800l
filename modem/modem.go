@@ -64,7 +64,7 @@ func (mdm *GsmModem) Open(baud int) error {
 						mdm.handleSms(msg)
 					}(answer)
 				} else if strings.HasPrefix(parts[1], "+CMGS") { // Передано смс-сообщение
-					mdm.em.SetEvent(parts[0]+"\r", "OK")
+					mdm.em.SetEvent(parts[0]+"\r", "OK\r\n")
 				} else {
 					mdm.em.SetEvent(parts[0]+"\r", parts[1])
 				}
@@ -88,6 +88,11 @@ func (mdm *GsmModem) Open(baud int) error {
 				// можно поделить на две "нормальных" команды - если подряд идут \r\n\r\n, по этому месту делим на две команды
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)
+			} else if strings.Index(string(buff), "\r\n+CMGS") != -1 { // Ответ на окончательную отправку СМС
+				log.Printf("SMS sended: %s", string(buff))
+				pos := strings.Index(string(buff), "\r\n+CMGS")
+				buff = append(buff[:pos], 0x1A)
+				mdm.em.SetEvent(string(buff), "OK\r\n")
 			} else { // NO CARRIER (положили трубку),
 				log.Printf("Other: %s", string(buff))
 			}
@@ -144,14 +149,16 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 		return false, err
 	}
 	result, err := mdm.em.WaitEvent(cmd, time.Second*15)
-	log.Println("Result1:" + result)
+	//	log.Println("Result1:" + result)
 	if err != nil {
 		return false, err
 	}
-	log.Println("Result2:" + result)
-	waitAnswer = waitAnswer + "\r\n"
+	//	log.Println("Result2:" + result)
+	if waitAnswer != "> " { // Приглашение на ввод СМС не завершается \r\n
+		waitAnswer = waitAnswer + "\r\n"
+	}
 	if result == waitAnswer {
-		log.Println("Result3: Ответ совпал")
+		log.Println("Result sendCommand: Ответ совпал\n")
 	}
 	return result == waitAnswer, nil
 }
@@ -166,7 +173,8 @@ func (mdm *GsmModem) sendCommandNoWait(cmd string) bool {
 
 // сам запрос баланса синхронный, асинхронный ответ придет с +CUSD
 func (mdm *GsmModem) GetBalance() bool {
-	mdm.sendCommand("AT+CMGF=1\r", "AT+CMGF")
+	mdm.sendCommand("AT+CMGF=1\r", "OK")
+	time.Sleep(time.Second * 3)
 	cmd := "AT+CUSD=1,\"*100#\"\r"
 	res, _ := mdm.sendCommand(cmd, "OK")
 	return res
@@ -258,7 +266,7 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 
 	cmd = "AT+CMGF=0\r"
 	res, _ = mdm.sendCommand(cmd, "OK")
-
+	time.Sleep(time.Second * 3)
 	sms = mdm.convertSms(sms)
 	txtLen := len(sms) / 2
 	msgLen := txtLen + 14
@@ -284,18 +292,23 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 
 	cmd = "AT+CMGS=" + strconv.Itoa(msgLen) + "\r"
 	res, _ = mdm.sendCommand(cmd, "> ") //62 32
-
+	if res {
+		log.Println("Ответ > получен")
+	} else {
+		log.Println("Ответ > не получен")
+	}
 	//+ std::string("46")+ std::string("043F0440043804320435044200200445043004310440002C0020044D0442043E00200442043504410442043E0432043E043500200441043E043E043104490435043D04380435");
 	//                                  043F0440043804320435044200200445043004310440002C0020044D0442043E00200442043504410442043E0432043E043500200441043E043E043104490435043D04380435//
 	cmdByte := []byte(msg)
 	cmdByte = append(cmdByte, 0x1A)
 	msg = string(cmdByte)
 	res, _ = mdm.sendCommand(msg, "OK")
-	cmd = "AT+CMGF=1\r"
-	mdm.sendCommand(cmd, "OK")
 	if res {
 		log.Println("Сообщение отправлено")
 	}
+
+	cmd = "AT+CMGF=1\r"
+	mdm.sendCommand(cmd, "OK")
 	return res
 }
 
@@ -305,7 +318,7 @@ func (mdm *GsmModem) convertSms(msg string) string {
 
 	result := ""
 	msgBytes := []byte(msg)
-	log.Printf("%v", msgBytes)
+	//	log.Printf("%v", msgBytes)
 	for i := 0; i < len(msgBytes); i++ {
 		sym := msgBytes[i]
 
@@ -324,6 +337,6 @@ func (mdm *GsmModem) convertSms(msg string) string {
 		symHex := fmt.Sprintf("%02x", sym)
 		result = result + symHex
 	}
-	log.Println(result)
+	//	log.Println(result)
 	return result
 }

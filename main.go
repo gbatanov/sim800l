@@ -14,7 +14,7 @@ import (
 	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.2.6"
+const VERSION = "0.2.7"
 const PORT = "/dev/tty.usbserial-A50285BI"
 
 func main() {
@@ -57,7 +57,7 @@ func main() {
 						case 'b':
 							mdm.GetBalance()
 						case 's':
-							mdm.SendSms("Царь-надёжа OK")
+							mdm.SendSms("Ёлки-палки 2023 USSR")
 						} //switch
 					} else {
 						time.Sleep(time.Second * 3)

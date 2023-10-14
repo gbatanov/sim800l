@@ -84,26 +84,46 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 				u.Flag = false
 			}
 		} else if err == nil && n > 0 {
-			/*
-				if BufRead[0] == '>' {
-					cmdinput <- BufRead[:n]
-					BufReadResult = make([]byte, 0)
-					k = 0
-				} else */{
-				BufReadResult = append(BufReadResult, BufRead[:n]...)
-				k += n
-				log.Printf("1.Received: %v \n", BufReadResult[:k])
 
-				cnt := strings.Count(string(BufReadResult[:k]), "\r\n")
-				if cnt > 1 {
-					log.Printf("2.Received: %v \n", BufReadResult[:k])
+			BufReadResult = append(BufReadResult, BufRead[:n]...)
+			k += n
+			//			log.Printf("1.Received: %v \n", BufReadResult[:k])
+
+			cnt := strings.Count(string(BufReadResult[:k]), "\r\n")
+			if cnt > 1 {
+				// Надо найти последнее вхождение \r\n и если после него есть
+				// еще символы, их надо перенести в следующий буфер
+				// k-1 - последний символ
+				// k-2 - предпоследний
+				//				log.Printf("2.Received: %v \n", BufReadResult[:k])
+				if BufReadResult[k-2] == '\r' && BufReadResult[k-1] == '\n' {
 					cmdinput <- BufReadResult[:k]
 					BufReadResult = make([]byte, 0)
 					k = 0
+				} else {
+					z := k - 1
+					for BufReadResult[z] != '\n' {
+						z = z - 1
+					}
+
+					cmdinput <- BufReadResult[:z+1]
+					BufReadResult = BufReadResult[z+1 : k]
+					k = k - z
+				}
+			} else {
+				//проверим на > ответ на первую часть отправки СМС
+				if k > 2 {
+					if BufReadResult[k-2] == '>' && BufReadResult[k-1] == ' ' {
+						//						log.Printf("3.Received: %v \n", BufReadResult[:k])
+						cmdinput <- BufReadResult[:k]
+						BufReadResult = make([]byte, 0)
+						k = 0
+					}
 				}
 			}
-			// if there is no command, wait 1 sec
-			time.Sleep(1 * time.Second)
+
+			// if there is no command, wait 1 sec, меньше секунды показывает нестабильный результат
+			time.Sleep(1000 * time.Millisecond)
 		}
 		for i := 0; i < n; i++ {
 			BufRead[i] = 0

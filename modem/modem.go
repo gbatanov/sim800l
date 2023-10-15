@@ -92,11 +92,25 @@ func (mdm *GsmModem) Open(baud int) error {
 					go func(msg string) {
 						mdm.handleSms(msg)
 					}(answer)
+				} else if strings.HasPrefix(answer, "+CLIP") { // АОН на входящий звонок
+					go func(msg string) {
+						mdm.checkNumber(msg)
+					}(answer)
 				}
 			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+79250109365",145,"",0,"",0)
 				// можно поделить на две "нормальных" команды - если подряд идут \r\n\r\n, по этому месту делим на две команды
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)
+
+				if strings.Contains(answer, "+CLIP:") { // Входящий звонок, АОН пришел сразу
+					if strings.Contains(answer, "\r\n\r\n") {
+						answerParts := strings.Split(answer, "\r\n\r\n")
+						answer = "\r\n" + answerParts[1]
+					}
+					go func(msg string) {
+						mdm.checkNumber(msg)
+					}(answer)
+				}
 			} else if strings.Index(string(buff), "\r\n+CMGS") != -1 { // Ответ на окончательную отправку СМС
 				log.Printf("SMS sended: %s", string(buff))
 				pos := strings.Index(string(buff), "\r\n+CMGS")
@@ -119,6 +133,17 @@ func (mdm *GsmModem) Open(baud int) error {
 }
 func (mdm *GsmModem) Stop() {
 	mdm.uart.Stop()
+}
+
+// Проверяем номер звонящего.
+// Если это номер хозяина, поднмаем трубку, иначе прекращаем звонок.
+// \r\n+CLIP: "+79250109365",145,"",0,"",0\r\n
+func (mdm *GsmModem) checkNumber(answer string) {
+	if strings.Contains(answer, MY_PHONE_NUMBER) {
+		mdm.HangUp()
+	} else {
+		mdm.HangOut()
+	}
 }
 
 // Стартовая инициализация модема:

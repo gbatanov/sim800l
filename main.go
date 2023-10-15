@@ -14,7 +14,7 @@ import (
 	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.2.9"
+const VERSION = "0.2.10"
 const PORT = "/dev/tty.usbserial-A50285BI"
 
 func main() {

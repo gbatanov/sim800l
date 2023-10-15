@@ -96,6 +96,31 @@ func (mdm *GsmModem) Open(baud int) error {
 					go func(msg string) {
 						mdm.checkNumber(msg)
 					}(answer)
+				} else if strings.HasPrefix(answer, "+DTMF") { // тоновые команды, обработаем синхронно
+					if mdm.isCall {
+						// в ответе может придти несколько команд +DTMF
+						dtmfCount := strings.Count(answer, "+DTMF: ")
+						for dtmfCount > 0 {
+							pos := strings.Index(answer, "+DTMF: ")
+							cmd := string([]byte(answer)[pos+7 : pos+8])
+							answer = string([]byte(answer)[pos+8:])
+							log.Printf("%v\n", []byte(cmd))
+							if mdm.toneCmdStarted {
+								if cmd == "#" {
+									mdm.toneCmdStarted = false
+									// дать отбой и выполнить команду
+									go func() {
+										mdm.executeToneComand()
+									}()
+								} else {
+									mdm.toneCmd += cmd
+								}
+							} else if cmd == "*" {
+								mdm.toneCmdStarted = true
+							}
+							dtmfCount = strings.Count(answer, "+DTMF: ")
+						}
+					}
 				}
 			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+79250109365",145,"",0,"",0)
 				// можно поделить на две "нормальных" команды - если подряд идут \r\n\r\n, по этому месту делим на две команды
@@ -418,4 +443,10 @@ func (mdm *GsmModem) HangUp() {
 		mdm.isCall = true // включааем признак, позволяющий принимать тоновые команды
 		log.Println("Отвечаем на звонок")
 	}
+}
+
+func (mdm *GsmModem) executeToneComand() {
+	mdm.HangOut()
+	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
+	mdm.toneCmd = ""
 }

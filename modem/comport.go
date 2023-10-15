@@ -95,7 +95,7 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 				// еще символы, их надо перенести в следующий буфер
 				// k-1 - последний символ
 				// k-2 - предпоследний
-				//				log.Printf("2.Received: %v \n", BufReadResult[:k])
+				log.Printf("2.Received: %v \n", BufReadResult[:k])
 				if BufReadResult[k-2] == '\r' && BufReadResult[k-1] == '\n' {
 					cmdinput <- BufReadResult[:k]
 					BufReadResult = make([]byte, 0)

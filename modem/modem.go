@@ -1,6 +1,7 @@
 package modem
 
 import (
+	"errors"
 	"fmt"
 	"gsm/event"
 	"log"
@@ -64,11 +65,19 @@ func (mdm *GsmModem) Open(baud int) error {
 						mdm.handleSms(msg)
 					}(answer)
 				} else if strings.HasPrefix(parts[1], "+CMGS") { // Передано смс-сообщение
+					// Реально сюда не придет, потому что в качестве команды будет отправленное сообщение,
+					// оно не завершается отправкой \r, а завершается \z, которое не приходит обратно
 					mdm.em.SetEvent(parts[0]+"\r", "OK\r\n")
+				} else if strings.HasPrefix(parts[1], "+COLP") { // ответ на вызов
+					if strings.Contains(parts[1], "\r\n\r\n") {
+						partsAnsw := strings.Split(parts[1], "\r\n\r\n")
+						mdm.em.SetEvent(parts[0]+"\r", partsAnsw[1])
+					}
 				} else {
 					mdm.em.SetEvent(parts[0]+"\r", parts[1])
 				}
 			} else if strings.HasPrefix(string(buff), "\r\n+") { //+CMTI, +CLIP, +CUSD, +CMGR
+				// Сообщения, которые могут придти в произвольное время
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)
 				if strings.HasPrefix(answer, "+CUSD") { // ответ на запрос баланса
@@ -94,7 +103,12 @@ func (mdm *GsmModem) Open(baud int) error {
 				buff = append(buff[:pos], 0x1A)
 				mdm.em.SetEvent(string(buff), "OK\r\n")
 			} else { // NO CARRIER (положили трубку),
-				log.Printf("Other: %s", string(buff))
+				if string(buff) == "\r\nNO CARRIER\r\n" {
+					log.Println("Не берут трубку")
+					mdm.isCall = false
+				} else {
+					log.Printf("Other: %s", string(buff))
+				}
 			}
 			time.Sleep(time.Second * 2)
 		}
@@ -142,13 +156,16 @@ func (mdm *GsmModem) setAon() bool {
 }
 
 // Синхронные команды
+// waitAnswer - ожидаемый положительный ответ
+// Если ответ не совпал, в ошибке вернется принятый ответ, это имеет значение при голосовых вызовах
 func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 	log.Printf("Send command %s", cmd)
 	err := mdm.uart.Write([]byte(cmd))
 	if err != nil {
 		return false, err
 	}
-	result, err := mdm.em.WaitEvent(cmd, time.Second*15)
+	result, err := mdm.em.WaitEvent(cmd, time.Second*60) // минута нужна для правильного ответа на исходящий звонок,
+	//														иначе всегда будет Timeout, если не берут трубку
 	//	log.Println("Result1:" + result)
 	if err != nil {
 		return false, err
@@ -158,9 +175,10 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 		waitAnswer = waitAnswer + "\r\n"
 	}
 	if result == waitAnswer {
-		log.Println("Result sendCommand: Ответ совпал\n")
+		log.Println("Result sendCommand: Ответ совпал")
+		return true, nil
 	}
-	return result == waitAnswer, nil
+	return false, errors.New(result)
 }
 
 // Асинхронные команды
@@ -186,9 +204,9 @@ func (mdm *GsmModem) showBalance(msg string) {
 	res := string([]byte(msg)[pos+1:])
 	pos2 := strings.Index(res, "00200440002E")
 	res = string([]byte(res)[:pos2])
-	log.Printf("Balance1: %s\n", res)
+	//	log.Printf("Balance1: %s\n", res)
 	res = strings.Replace(res, "003", "", -1) // -1 - all
-	log.Printf("Balance2: %s\n", res)
+	//	log.Printf("Balance2: %s\n", res)
 	res = strings.Replace(res, "002E", ".", -1)
 	log.Printf("Balance: %s\n", res)
 	/*
@@ -233,13 +251,13 @@ func (mdm *GsmModem) readSms(msg string) {
 // ||+CMGR: "REC UNREAD","+79050109365","","23/06/08,17:32:30+12"||/cmnd401||||OK||
 func (mdm *GsmModem) handleSms(msg string) uint16 {
 	// принимаю команды пока только со своего телефона
-	log.Printf("SMS: %s \n", msg)
+	//	log.Printf("SMS: %s \n", msg)
 	cmdCode := 0
 	if strings.Index(msg, "7"+MY_PHONE_NUMBER) != -1 && strings.Index(msg, "/cmnd") != -1 {
 		// answer = gsbstring::remove_before(answer, "/cmnd");
 		pos := strings.Index(msg, "/cmnd")
 		answer := string([]byte(msg)[pos+5:])
-		log.Printf("SMS2: %s \n", answer)
+		//		log.Printf("SMS2: %s \n", answer)
 		// answer = gsbstring::remove_after(answer, "||||");
 		pos = strings.Index(answer, "\r\n\r\n")
 		answer = string([]byte(answer)[:pos])
@@ -339,4 +357,23 @@ func (mdm *GsmModem) convertSms(msg string) string {
 	}
 	//	log.Println(result)
 	return result
+}
+
+// Звонок на основной номер
+// Если трубку не берут, он звонит еще раз, если и второй раз не берут, модем отвечает NO CARRIER
+// Мой модем на все отвечает NO CARRIER - не берут трубку, положили трубку ((
+// Нет признака, что трубку взяли
+func (mdm *GsmModem) CallMain() {
+	go func() {
+		cmd := "ATD+7" + MY_PHONE_NUMBER + ";\r"
+		_, err := mdm.sendCommand(cmd, "OK")
+		if err != nil {
+			// Здесь будет ответ, отличный от "OK"
+
+			log.Println(err.Error())
+			mdm.isCall = false
+		} else {
+			mdm.isCall = true
+		}
+	}()
 }

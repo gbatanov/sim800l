@@ -11,6 +11,10 @@ type Event struct {
 	Message string
 }
 
+func (ev *Event) Reset() {
+	ev.Message = ""
+}
+
 type EventEmitter struct {
 	Events []*Event
 }
@@ -59,6 +63,7 @@ func (em *EventEmitter) ResetEvent(id string) {
 // Неинициированные нами команды не порождают событие, обрабатываются своим обработчиком
 func (em *EventEmitter) WaitEvent(id string, timeout time.Duration) (string, error) {
 	event := em.GetEvent(id)
+	event.Reset()
 	if event.Message != "" {
 		return event.Message, nil
 	}

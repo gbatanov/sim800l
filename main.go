@@ -14,7 +14,7 @@ import (
 	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.2.7"
+const VERSION = "0.2.8"
 const PORT = "/dev/tty.usbserial-A50285BI"
 
 func main() {
@@ -50,14 +50,17 @@ func main() {
 				for Flag {
 					reader := bufio.NewReader(os.Stdin)
 					text, _ := reader.ReadString('\n')
-					if len(text) > 0 {
-						switch []byte(text)[0] {
-						case 'q':
+					if len(text) > 1 { // text включает завершающий \n
+						// log.Printf("%v", []byte(text))
+						switch text {
+						case "q\n":
 							Flag = false
-						case 'b':
+						case "balance\n":
 							mdm.GetBalance()
-						case 's':
+						case "sms\n":
 							mdm.SendSms("Ёлки-палки 2023 USSR")
+						case "call\n":
+							mdm.CallMain() // звонок на основной номер
 						} //switch
 					} else {
 						time.Sleep(time.Second * 3)

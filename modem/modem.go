@@ -105,7 +105,6 @@ func (mdm *GsmModem) Open(baud int) error {
 			} else { // NO CARRIER (положили трубку),
 				if string(buff) == "\r\nNO CARRIER\r\n" {
 					log.Println("Не берут трубку")
-					mdm.isCall = false
 				} else {
 					log.Printf("Other: %s", string(buff))
 				}
@@ -363,17 +362,35 @@ func (mdm *GsmModem) convertSms(msg string) string {
 // Если трубку не берут, он звонит еще раз, если и второй раз не берут, модем отвечает NO CARRIER
 // Мой модем на все отвечает NO CARRIER - не берут трубку, положили трубку ((
 // Нет признака, что трубку взяли
+// Но в моем случае важен сам факт звонка, ибо система делает звонок только при аварийных ситуациях
+// которые можно уточнить, запросив статус через телеграм или смс
 func (mdm *GsmModem) CallMain() {
 	go func() {
 		cmd := "ATD+7" + MY_PHONE_NUMBER + ";\r"
 		_, err := mdm.sendCommand(cmd, "OK")
 		if err != nil {
 			// Здесь будет ответ, отличный от "OK"
-
 			log.Println(err.Error())
-			mdm.isCall = false
-		} else {
-			mdm.isCall = true
 		}
 	}()
+}
+
+// Повесить трубку
+// ATH0             OK
+func (mdm *GsmModem) HangOut() {
+	cmd := "ATH0\r"
+	mdm.sendCommand(cmd, "OK")
+	mdm.isCall = false
+	log.Println("Вешаем трубку")
+}
+
+// Поднять трубку
+// ATA            OK
+func (mdm *GsmModem) HangUp() {
+	cmd := "ATA\r"
+	_, err := mdm.sendCommand(cmd, "OK")
+	if err == nil {
+		mdm.isCall = true // включааем признак, позволяющий принимать тоновые команды
+		log.Println("Отвечаем на звонок")
+	}
 }

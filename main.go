@@ -14,7 +14,7 @@ import (
 	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.2.8"
+const VERSION = "0.2.9"
 const PORT = "/dev/tty.usbserial-A50285BI"
 
 func main() {
@@ -61,6 +61,10 @@ func main() {
 							mdm.SendSms("Ёлки-палки 2023 USSR")
 						case "call\n":
 							mdm.CallMain() // звонок на основной номер
+						case "up\n":
+							mdm.HangUp() // поднять трубку
+						case "down\n":
+							mdm.HangOut() // сбросить звонок
 						} //switch
 					} else {
 						time.Sleep(time.Second * 3)

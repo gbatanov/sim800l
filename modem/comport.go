@@ -92,7 +92,8 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 			cnt := strings.Count(string(BufReadResult[:k]), "\r\n")
 			if cnt > 1 {
 				// Надо найти последнее вхождение \r\n и если после него есть
-				// еще символы, их надо перенести в следующий буфер
+				// еще символы, их надо перенести в следующий буфер вместе с \r\n
+				//
 				// k-1 - последний символ
 				// k-2 - предпоследний
 				log.Printf("2.Received: %v \n", BufReadResult[:k])
@@ -102,12 +103,12 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 					k = 0
 				} else {
 					z := k - 1
-					for BufReadResult[z] != '\n' {
+					for BufReadResult[z] != '\r' {
 						z = z - 1
 					}
 
-					cmdinput <- BufReadResult[:z+1]
-					BufReadResult = BufReadResult[z+1 : k]
+					cmdinput <- BufReadResult[:z]
+					BufReadResult = BufReadResult[z:k]
 					k = k - z
 				}
 			} else {

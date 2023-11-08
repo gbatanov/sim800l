@@ -13,23 +13,23 @@ import (
 
 const RX_BUFFER_SIZE = 1024
 const TX_BUFFER_SIZE = 256
-const MY_PHONE_NUMBER = "9250109365"
-const MY_PHONE_NUMBER_FOR_SMS = "9752109063F5"
 
 var CmdInput chan []byte = make(chan []byte, 256)
 
 type GsmModem struct {
-	uart           *Uart
-	rxBuff         []byte
-	txBuff         []byte
-	isCall         bool
-	toneCmd        string
-	toneCmdStarted bool
-	Flag           bool
-	em             *event.EventEmitter
+	uart             *Uart
+	rxBuff           []byte
+	txBuff           []byte
+	isCall           bool
+	toneCmd          string
+	toneCmdStarted   bool
+	Flag             bool
+	em               *event.EventEmitter
+	myPhoneNumber    string
+	myPhoneNumberSms string
 }
 
-func GsmModemCreate(port string, os string, baud int) *GsmModem {
+func GsmModemCreate(port string, os string, baud int, phoneNumber string) *GsmModem {
 	gsm := GsmModem{}
 	gsm.uart = UartCreate(port, os, baud)
 	gsm.rxBuff = make([]byte, 0, RX_BUFFER_SIZE)
@@ -39,6 +39,20 @@ func GsmModemCreate(port string, os string, baud int) *GsmModem {
 	gsm.toneCmdStarted = false
 	gsm.Flag = true
 	gsm.em = event.EventEmitterCreate()
+	gsm.myPhoneNumber = phoneNumber
+
+	phSms := []byte("7" + phoneNumber)
+	if len(phSms)%2 != 0 {
+		phSms = append(phSms, 'F')
+	}
+	for i := 0; i < len(phSms); i = i + 2 {
+		a := phSms[i]
+		phSms[i] = phSms[i+1]
+		phSms[i+1] = a
+	}
+	gsm.myPhoneNumberSms = string(phSms)
+
+	log.Println(gsm.myPhoneNumberSms)
 
 	return &gsm
 }
@@ -164,9 +178,9 @@ func (mdm *GsmModem) Stop() {
 
 // Проверяем номер звонящего.
 // Если это номер хозяина, поднимаем трубку, иначе прекращаем звонок.
-// \r\n+CLIP: "+79250109365",145,"",0,"",0\r\n
+// \r\n+CLIP: "+71234567890",145,"",0,"",0\r\n
 func (mdm *GsmModem) checkNumber(answer string) {
-	if strings.Contains(answer, MY_PHONE_NUMBER) {
+	if strings.Contains(answer, mdm.myPhoneNumber) {
 		mdm.HangUp()
 	} else {
 		mdm.HangOut()
@@ -298,13 +312,11 @@ func (mdm *GsmModem) readSms(msg string) {
 	}
 }
 
-// ||CMGR: "REC UNREAD","+70250109365","","22/09/03,12:42:54+12"||test 5||||OK||
-// ||+CMGR: "REC UNREAD","+79050109365","","23/06/08,17:32:30+12"||/cmnd401||||OK||
 func (mdm *GsmModem) handleSms(msg string) uint16 {
 	// принимаю команды пока только со своего телефона
 	//	log.Printf("SMS: %s \n", msg)
 	cmdCode := 0
-	if strings.Contains(msg, "7"+MY_PHONE_NUMBER) && strings.Contains(msg, "/cmnd") {
+	if strings.Contains(msg, "7"+mdm.myPhoneNumber) && strings.Contains(msg, "/cmnd") {
 		pos := strings.Index(msg, "/cmnd")
 		answer := string([]byte(msg)[pos+5:])
 		//		log.Printf("SMS2: %s \n", answer)
@@ -346,14 +358,14 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	// 0B - Длина номера получателя (11 цифр)
 	// 91 - Тип-адреса. (91 указывает международный формат телефонного номера, 81 - местный формат).
 	//
-	// 9752109063F5 - Телефонный номер получателя в международном формате. (Пары цифр переставлены местами, если номер с нечетным количеством цифр, добавляется F) 79250109365 -> 9752109063F5
+	//  - Телефонный номер получателя в международном формате. (Пары цифр переставлены местами, если номер с нечетным количеством цифр, добавляется F)
 	// 00 - Идентификатор протокола
 	// 08 - Старший полубайт означает сохранять SMS у получателя или нет (Flash SMS),  Младший полубайт - кодировка(0-латиница 8-кирилица).
 	// C1 - Срок доставки сообщения. С1 - неделя
 	// 46 - Длина текста сообщения
 	// Далее само сообщение в кодировке UCS2 (35 символов кириллицы, 70 байт, 2 байта на символ)
 
-	msg := "0011000B91" + MY_PHONE_NUMBER_FOR_SMS + "0008C1"
+	msg := "0011000B91" + mdm.myPhoneNumberSms + "0008C1"
 	msg = msg + buff + sms
 
 	cmd = "AT+CMGS=" + strconv.Itoa(msgLen) + "\r"
@@ -413,7 +425,7 @@ func (mdm *GsmModem) convertSms(msg string) string {
 // которые можно уточнить, запросив статус через телеграм или смс
 func (mdm *GsmModem) CallMain() {
 	go func() {
-		cmd := "ATD+7" + MY_PHONE_NUMBER + ";\r"
+		cmd := "ATD+7" + mdm.myPhoneNumber + ";\r"
 		_, err := mdm.sendCommand(cmd, "OK")
 		if err != nil {
 			// Здесь будет ответ, отличный от "OK"

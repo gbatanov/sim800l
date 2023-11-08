@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"fmt"
+
 	"time"
 
 	"log"
@@ -14,12 +16,19 @@ import (
 	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.3.13"
+const VERSION = "0.3.14"
 const PORT = "/dev/tty.usbserial-A50285BI"
 
 func main() {
 	log.Println("Start")
 	Flag := true
+
+	args := os.Args[1:]
+	if len(args) == 0 {
+		fmt.Println("Введите номер телефона в формате 1234567890, без + и 7. Пробелы не допускаются")
+		return
+	}
+	phoneNumber := args[0]
 
 	gi, _ := goInfo.GetInfo()
 	oss := gi.GoOS
@@ -38,7 +47,7 @@ func main() {
 	}()
 
 	if Flag {
-		mdm := modem.GsmModemCreate(PORT, oss, 9600)
+		mdm := modem.GsmModemCreate(PORT, oss, 9600, phoneNumber)
 		err := mdm.Open()
 		//		var err error = nil
 		if err == nil {

@@ -1,3 +1,7 @@
+/*
+GSM-modem SIM800l
+Copyright (c) GSB, Georgii Batanov gbatanov @ yandex.ru
+*/
 package modem
 
 import (
@@ -23,7 +27,6 @@ type Uart struct {
 
 func init() {
 	fmt.Println("Init in comport")
-	// TODO: check availability serial port
 }
 
 func UartCreate(port string, os string, baud int) *Uart {
@@ -56,7 +59,7 @@ func (u *Uart) Stop() {
 		u.comport.Flush()
 		u.comport.Close()
 		u.portOpened = false
-		log.Println("comport closed")
+		log.Println("Comport closed")
 	}
 }
 
@@ -72,7 +75,7 @@ func (u Uart) Write(text []byte) error {
 	return nil
 }
 
-// The cycle of receiving commands from the zhub
+// The cycle of receiving commands from SIM800l
 // in this serial port library version we get chunks 64 byte size !!!
 func (u *Uart) Loop(cmdinput chan []byte) {
 	BufRead := make([]byte, 256)
@@ -116,7 +119,7 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 				//проверим на > ответ на первую часть отправки СМС
 				if k > 2 {
 					if BufReadResult[k-2] == '>' && BufReadResult[k-1] == ' ' {
-						//						log.Printf("3.Received: %v \n", BufReadResult[:k])
+						//log.Printf("3.Received: %v \n", BufReadResult[:k])
 						cmdinput <- BufReadResult[:k]
 						BufReadResult = make([]byte, 0)
 						k = 0

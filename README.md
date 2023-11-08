@@ -1,6 +1,6 @@
-# gsm
-Gsm modem, standalone version
+# Gsm modem
 
+Пример работы модема в качестве внешнего.
 
 ## Модем SIM800l
 

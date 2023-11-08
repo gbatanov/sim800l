@@ -18,20 +18,21 @@ type Uart struct {
 	comport    *serial.Port
 	Flag       bool
 	portOpened bool
+	baud       int
 }
 
 func init() {
-	fmt.Println("Init in serial3")
+	fmt.Println("Init in comport")
 	// TODO: check availability serial port
 }
 
-func UartCreate(port string, os string) *Uart {
-	uart := Uart{port: port, os: os}
+func UartCreate(port string, os string, baud int) *Uart {
+	uart := Uart{port: port, os: os, baud: baud}
 	return &uart
 }
 
-func (u *Uart) Open(baud int) error {
-	comport, err := u.openPort(baud)
+func (u *Uart) Open() error {
+	comport, err := u.openPort()
 	if err != nil {
 		log.Println("Error open port ", u.port)
 		return err
@@ -43,8 +44,8 @@ func (u *Uart) Open(baud int) error {
 }
 
 // Opening the given port
-func (u Uart) openPort(baud int) (*serial.Port, error) {
-	c := &serial.Config{Name: u.port, Baud: baud, ReadTimeout: time.Second * 3}
+func (u Uart) openPort() (*serial.Port, error) {
+	c := &serial.Config{Name: u.port, Baud: u.baud, ReadTimeout: time.Second * 3}
 	return serial.OpenPort(c)
 
 }
@@ -133,7 +134,6 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 }
 
 func (u Uart) SendCommandToDevice(buff []byte) error {
-
 	err := u.Write(buff)
 	return err
 }

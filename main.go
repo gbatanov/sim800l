@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"gsm/modem"
 	"time"
 
 	"log"
@@ -11,10 +10,11 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/gbatanov/gsm/modem"
 	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.2.11"
+const VERSION = "0.3.13"
 const PORT = "/dev/tty.usbserial-A50285BI"
 
 func main() {
@@ -38,8 +38,8 @@ func main() {
 	}()
 
 	if Flag {
-		mdm := modem.GsmModemCreate(PORT, oss)
-		err := mdm.Open(9600)
+		mdm := modem.GsmModemCreate(PORT, oss, 9600)
+		err := mdm.Open()
 		//		var err error = nil
 		if err == nil {
 			defer mdm.Stop()

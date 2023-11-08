@@ -27,6 +27,7 @@ type GsmModem struct {
 	em               *event.EventEmitter
 	myPhoneNumber    string
 	myPhoneNumberSms string
+	CmdToController  chan string
 }
 
 func GsmModemCreate(port string, os string, baud int, phoneNumber string) *GsmModem {
@@ -40,6 +41,7 @@ func GsmModemCreate(port string, os string, baud int, phoneNumber string) *GsmMo
 	gsm.Flag = true
 	gsm.em = event.EventEmitterCreate()
 	gsm.myPhoneNumber = phoneNumber
+	gsm.CmdToController = make(chan string, 1)
 
 	phSms := []byte("7" + phoneNumber)
 	if len(phSms)%2 != 0 {
@@ -457,5 +459,6 @@ func (mdm *GsmModem) HangUp() {
 func (mdm *GsmModem) executeToneComand() {
 	mdm.HangOut()
 	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
+	mdm.CmdToController <- mdm.toneCmd
 	mdm.toneCmd = ""
 }

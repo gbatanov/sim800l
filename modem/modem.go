@@ -140,7 +140,7 @@ func (mdm *GsmModem) Open() error {
 						}
 					}
 				}
-			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+79250109365",145,"",0,"",0)
+			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+71234567890",145,"",0,"",0)
 				// можно поделить на две "нормальных" команды - если подряд идут \r\n\r\n, по этому месту делим на две команды
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)

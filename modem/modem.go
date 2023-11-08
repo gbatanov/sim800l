@@ -1,3 +1,7 @@
+/*
+GSM-modem SIM800l
+Copyright (c) GSB, Georgii Batanov gbatanov @ yandex.ru
+*/
 package modem
 
 import (
@@ -176,6 +180,7 @@ func (mdm *GsmModem) Open() error {
 }
 func (mdm *GsmModem) Stop() {
 	mdm.uart.Stop()
+	log.Printf("Modem stop")
 }
 
 // Проверяем номер звонящего.

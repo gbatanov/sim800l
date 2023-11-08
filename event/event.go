@@ -1,3 +1,7 @@
+/*
+GSM-modem SIM800l
+Copyright (c) GSB, Georgii Batanov gbatanov @ yandex.ru
+*/
 package event
 
 import (

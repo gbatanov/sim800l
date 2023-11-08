@@ -1,3 +1,7 @@
+/*
+GSM-modem SIM800l
+Copyright (c) GSB, Georgii Batanov gbatanov @ yandex.ru
+*/
 package modem
 
 import (
@@ -18,20 +22,20 @@ type Uart struct {
 	comport    *serial.Port
 	Flag       bool
 	portOpened bool
+	baud       int
 }
 
 func init() {
-	fmt.Println("Init in serial3")
-	// TODO: check availability serial port
+	fmt.Println("Init in comport")
 }
 
-func UartCreate(port string, os string) *Uart {
-	uart := Uart{port: port, os: os}
+func UartCreate(port string, os string, baud int) *Uart {
+	uart := Uart{port: port, os: os, baud: baud}
 	return &uart
 }
 
-func (u *Uart) Open(baud int) error {
-	comport, err := u.openPort(baud)
+func (u *Uart) Open() error {
+	comport, err := u.openPort()
 	if err != nil {
 		log.Println("Error open port ", u.port)
 		return err
@@ -43,8 +47,8 @@ func (u *Uart) Open(baud int) error {
 }
 
 // Opening the given port
-func (u Uart) openPort(baud int) (*serial.Port, error) {
-	c := &serial.Config{Name: u.port, Baud: baud, ReadTimeout: time.Second * 3}
+func (u Uart) openPort() (*serial.Port, error) {
+	c := &serial.Config{Name: u.port, Baud: u.baud, ReadTimeout: time.Second * 3}
 	return serial.OpenPort(c)
 
 }
@@ -55,7 +59,7 @@ func (u *Uart) Stop() {
 		u.comport.Flush()
 		u.comport.Close()
 		u.portOpened = false
-		log.Println("comport closed")
+		log.Println("Comport closed")
 	}
 }
 
@@ -71,7 +75,7 @@ func (u Uart) Write(text []byte) error {
 	return nil
 }
 
-// The cycle of receiving commands from the zhub
+// The cycle of receiving commands from SIM800l
 // in this serial port library version we get chunks 64 byte size !!!
 func (u *Uart) Loop(cmdinput chan []byte) {
 	BufRead := make([]byte, 256)
@@ -115,7 +119,7 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 				//проверим на > ответ на первую часть отправки СМС
 				if k > 2 {
 					if BufReadResult[k-2] == '>' && BufReadResult[k-1] == ' ' {
-						//						log.Printf("3.Received: %v \n", BufReadResult[:k])
+						//log.Printf("3.Received: %v \n", BufReadResult[:k])
 						cmdinput <- BufReadResult[:k]
 						BufReadResult = make([]byte, 0)
 						k = 0
@@ -133,7 +137,6 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 }
 
 func (u Uart) SendCommandToDevice(buff []byte) error {
-
 	err := u.Write(buff)
 	return err
 }

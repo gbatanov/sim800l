@@ -1,35 +1,42 @@
+/*
+GSM-modem SIM800l
+Copyright (c) GSB, Georgii Batanov gbatanov @ yandex.ru
+*/
 package modem
 
 import (
 	"errors"
 	"fmt"
-	"gsm/event"
 	"log"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gbatanov/gsm/event"
 )
 
 const RX_BUFFER_SIZE = 1024
 const TX_BUFFER_SIZE = 256
-const MY_PHONE_NUMBER = "9250109365"
 
 var CmdInput chan []byte = make(chan []byte, 256)
 
 type GsmModem struct {
-	uart           *Uart
-	rxBuff         []byte
-	txBuff         []byte
-	isCall         bool
-	toneCmd        string
-	toneCmdStarted bool
-	Flag           bool
-	em             *event.EventEmitter
+	uart             *Uart
+	rxBuff           []byte
+	txBuff           []byte
+	isCall           bool
+	toneCmd          string
+	toneCmdStarted   bool
+	Flag             bool
+	em               *event.EventEmitter
+	myPhoneNumber    string
+	myPhoneNumberSms string
+	CmdToController  chan string
 }
 
-func GsmModemCreate(port string, os string) *GsmModem {
+func GsmModemCreate(port string, os string, baud int, phoneNumber string) *GsmModem {
 	gsm := GsmModem{}
-	gsm.uart = UartCreate(port, os)
+	gsm.uart = UartCreate(port, os, baud)
 	gsm.rxBuff = make([]byte, 0, RX_BUFFER_SIZE)
 	gsm.txBuff = make([]byte, 0, TX_BUFFER_SIZE)
 	gsm.isCall = false
@@ -37,12 +44,27 @@ func GsmModemCreate(port string, os string) *GsmModem {
 	gsm.toneCmdStarted = false
 	gsm.Flag = true
 	gsm.em = event.EventEmitterCreate()
+	gsm.myPhoneNumber = phoneNumber
+	gsm.CmdToController = make(chan string, 1)
+
+	phSms := []byte("7" + phoneNumber)
+	if len(phSms)%2 != 0 {
+		phSms = append(phSms, 'F')
+	}
+	for i := 0; i < len(phSms); i = i + 2 {
+		a := phSms[i]
+		phSms[i] = phSms[i+1]
+		phSms[i+1] = a
+	}
+	gsm.myPhoneNumberSms = string(phSms)
+
+	log.Println(gsm.myPhoneNumberSms)
 
 	return &gsm
 }
 
-func (mdm *GsmModem) Open(baud int) error {
-	err := mdm.uart.Open(baud)
+func (mdm *GsmModem) Open() error {
+	err := mdm.uart.Open()
 	if err != nil {
 		return err
 	}
@@ -122,7 +144,7 @@ func (mdm *GsmModem) Open(baud int) error {
 						}
 					}
 				}
-			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+79250109365",145,"",0,"",0)
+			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+71234567890",145,"",0,"",0)
 				// можно поделить на две "нормальных" команды - если подряд идут \r\n\r\n, по этому месту делим на две команды
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)
@@ -136,7 +158,7 @@ func (mdm *GsmModem) Open(baud int) error {
 						mdm.checkNumber(msg)
 					}(answer)
 				}
-			} else if strings.Index(string(buff), "\r\n+CMGS") != -1 { // Ответ на окончательную отправку СМС
+			} else if strings.Contains(string(buff), "\r\n+CMGS") { // Ответ на окончательную отправку СМС
 				log.Printf("SMS sended: %s", string(buff))
 				pos := strings.Index(string(buff), "\r\n+CMGS")
 				buff = append(buff[:pos], 0x1A)
@@ -158,13 +180,14 @@ func (mdm *GsmModem) Open(baud int) error {
 }
 func (mdm *GsmModem) Stop() {
 	mdm.uart.Stop()
+	log.Printf("Modem stop")
 }
 
 // Проверяем номер звонящего.
-// Если это номер хозяина, поднмаем трубку, иначе прекращаем звонок.
-// \r\n+CLIP: "+79250109365",145,"",0,"",0\r\n
+// Если это номер хозяина, поднимаем трубку, иначе прекращаем звонок.
+// \r\n+CLIP: "+71234567890",145,"",0,"",0\r\n
 func (mdm *GsmModem) checkNumber(answer string) {
-	if strings.Contains(answer, MY_PHONE_NUMBER) {
+	if strings.Contains(answer, mdm.myPhoneNumber) {
 		mdm.HangUp()
 	} else {
 		mdm.HangOut()
@@ -296,24 +319,21 @@ func (mdm *GsmModem) readSms(msg string) {
 	}
 }
 
-// ||CMGR: "REC UNREAD","+70250109365","","22/09/03,12:42:54+12"||test 5||||OK||
-// ||+CMGR: "REC UNREAD","+79050109365","","23/06/08,17:32:30+12"||/cmnd401||||OK||
 func (mdm *GsmModem) handleSms(msg string) uint16 {
 	// принимаю команды пока только со своего телефона
 	//	log.Printf("SMS: %s \n", msg)
 	cmdCode := 0
-	if strings.Index(msg, "7"+MY_PHONE_NUMBER) != -1 && strings.Index(msg, "/cmnd") != -1 {
-		// answer = gsbstring::remove_before(answer, "/cmnd");
+	if strings.Contains(msg, "7"+mdm.myPhoneNumber) && strings.Contains(msg, "/cmnd") {
 		pos := strings.Index(msg, "/cmnd")
 		answer := string([]byte(msg)[pos+5:])
 		//		log.Printf("SMS2: %s \n", answer)
-		// answer = gsbstring::remove_after(answer, "||||");
 		pos = strings.Index(answer, "\r\n\r\n")
 		answer = string([]byte(answer)[:pos])
 		log.Printf("SMS3: %s \n", answer)
 		answer = strings.ReplaceAll(answer, " ", "")
-		cmdCode, _ = strconv.Atoi(answer)
-		//	  execute_tone_command(answer);
+		//		cmdCode, _ = strconv.Atoi(answer)
+		mdm.toneCmd = answer // тоновые и смс команды унифицированы
+		mdm.executeToneComand()
 	}
 	// AT+CMGD=1,4
 	mdm.sendCommand("AT+CMGD=1,4\r", "OK") // Удаление всех сообщений, второй вариант
@@ -328,11 +348,11 @@ func (mdm *GsmModem) handleSms(msg string) uint16 {
 
 func (mdm *GsmModem) SendSms(sms string) bool {
 
-	cmd := ""
-	res := true
+	var cmd string = ""
+	var res bool
 
 	cmd = "AT+CMGF=0\r"
-	res, _ = mdm.sendCommand(cmd, "OK")
+	mdm.sendCommand(cmd, "OK")
 	time.Sleep(time.Second * 3)
 	sms = mdm.convertSms(sms)
 	txtLen := len(sms) / 2
@@ -345,17 +365,15 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	// 0B - Длина номера получателя (11 цифр)
 	// 91 - Тип-адреса. (91 указывает международный формат телефонного номера, 81 - местный формат).
 	//
-	// 9752109063F5 - Телефонный номер получателя в международном формате. (Пары цифр переставлены местами, если номер с нечетным количеством цифр, добавляется F) 79250109365 -> 9752109063F5
+	//  - Телефонный номер получателя в международном формате. (Пары цифр переставлены местами, если номер с нечетным количеством цифр, добавляется F)
 	// 00 - Идентификатор протокола
 	// 08 - Старший полубайт означает сохранять SMS у получателя или нет (Flash SMS),  Младший полубайт - кодировка(0-латиница 8-кирилица).
 	// C1 - Срок доставки сообщения. С1 - неделя
 	// 46 - Длина текста сообщения
 	// Далее само сообщение в кодировке UCS2 (35 символов кириллицы, 70 байт, 2 байта на символ)
 
-	msg := "0011000B91" + "9752109063F5" + "0008C1"
+	msg := "0011000B91" + mdm.myPhoneNumberSms + "0008C1"
 	msg = msg + buff + sms
-
-	buff = fmt.Sprintf("%02X", msgLen)
 
 	cmd = "AT+CMGS=" + strconv.Itoa(msgLen) + "\r"
 	res, _ = mdm.sendCommand(cmd, "> ") //62 32
@@ -364,8 +382,6 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	} else {
 		log.Println("Ответ > не получен")
 	}
-	//+ std::string("46")+ std::string("043F0440043804320435044200200445043004310440002C0020044D0442043E00200442043504410442043E0432043E043500200441043E043E043104490435043D04380435");
-	//                                  043F0440043804320435044200200445043004310440002C0020044D0442043E00200442043504410442043E0432043E043500200441043E043E043104490435043D04380435//
 	cmdByte := []byte(msg)
 	cmdByte = append(cmdByte, 0x1A)
 	msg = string(cmdByte)
@@ -416,7 +432,7 @@ func (mdm *GsmModem) convertSms(msg string) string {
 // которые можно уточнить, запросив статус через телеграм или смс
 func (mdm *GsmModem) CallMain() {
 	go func() {
-		cmd := "ATD+7" + MY_PHONE_NUMBER + ";\r"
+		cmd := "ATD+7" + mdm.myPhoneNumber + ";\r"
 		_, err := mdm.sendCommand(cmd, "OK")
 		if err != nil {
 			// Здесь будет ответ, отличный от "OK"
@@ -448,5 +464,6 @@ func (mdm *GsmModem) HangUp() {
 func (mdm *GsmModem) executeToneComand() {
 	mdm.HangOut()
 	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
+	mdm.CmdToController <- mdm.toneCmd
 	mdm.toneCmd = ""
 }

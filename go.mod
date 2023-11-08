@@ -1,4 +1,4 @@
-module gsm
+module github.com/gbatanov/gsm
 
 go 1.21.0
 

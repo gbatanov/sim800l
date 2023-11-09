@@ -1,4 +1,4 @@
-module github.com/gbatanov/gsm
+module github.com/gbatanov/sim800l
 
 go 1.21.0
 

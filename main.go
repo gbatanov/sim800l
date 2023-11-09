@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) GSB, Georgii Batanov gbatanov @ yandex.ru
+Copyright (c) 2023 GSB, Georgii Batanov gbatanov @ yandex.ru
 */
 package main
 
@@ -16,11 +16,11 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/gbatanov/gsm/modem"
+	"github.com/gbatanov/sim800l/modem"
 	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.3.17"
+const VERSION = "0.3.18"
 const PORT = "/dev/tty.usbserial-A50285BI"
 
 func main() {

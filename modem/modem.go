@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gbatanov/gsm/event"
+	"github.com/gbatanov/sim800l/event"
 )
 
 const RX_BUFFER_SIZE = 1024

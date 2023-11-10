@@ -1,8 +1,21 @@
 /*
 GSM-modem SIM800l
-Copyright (c) GSB, Georgii Batanov gbatanov @ yandex.ru
+Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>
 */
-package event
+package modem
 
 import (
 	"errors"
@@ -40,7 +53,7 @@ func (em *EventEmitter) CreateEvent(id string) *Event {
 	return &event
 }
 
-// Ищем событие по идентификатору, если еще нет, создае новое
+// Ищем событие по идентификатору, если еще нет, создаем новое
 func (em *EventEmitter) GetEvent(id string) *Event {
 	for _, ev := range em.Events {
 		if ev.Id == id {
@@ -62,7 +75,7 @@ func (em *EventEmitter) ResetEvent(id string) {
 	event.Message = ""
 }
 
-// ждем сообщения с заданным идентификатором
+// Ждем сообщения с заданным идентификатором
 // Здесь мы ожидаем ответ на отправленные нами команды
 // Неинициированные нами команды не порождают событие, обрабатываются своим обработчиком
 func (em *EventEmitter) WaitEvent(id string, timeout time.Duration) (string, error) {

@@ -1,12 +1,24 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023 GSB, Georgii Batanov gbatanov @ yandex.ru
+Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>
 */
 package main
 
 import (
 	"bufio"
-	"fmt"
 
 	"time"
 
@@ -17,25 +29,18 @@ import (
 	"syscall"
 
 	"github.com/gbatanov/sim800l/modem"
-	"github.com/matishsiao/goInfo"
 )
 
-const VERSION = "0.3.18"
+const VERSION = "0.4.19"
 const PORT = "/dev/tty.usbserial-A50285BI"
+const PHONE_NUMBER = "1234567890"
 
+// Пример использования пакета sim800l/modem
 func main() {
 	log.Println("Start")
 	Flag := true
 
-	args := os.Args[1:]
-	if len(args) == 0 {
-		fmt.Println("Введите номер телефона в формате 1234567890, без + и 7. Пробелы не допускаются")
-		return
-	}
-	phoneNumber := args[0]
-
-	gi, _ := goInfo.GetInfo()
-	oss := gi.GoOS
+	phoneNumber := PHONE_NUMBER
 
 	sigs := make(chan os.Signal, 1)
 	// signal.Notify registers this channel to receive notifications of the specified signals.
@@ -48,7 +53,7 @@ func main() {
 		Flag = false
 	}()
 
-	mdm := modem.GsmModemCreate(PORT, oss, 9600, phoneNumber)
+	mdm := modem.GsmModemCreate(PORT, 9600, phoneNumber)
 	err := mdm.Open()
 
 	if err != nil {

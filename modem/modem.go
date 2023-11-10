@@ -1,6 +1,19 @@
 /*
 GSM-modem SIM800l
-Copyright (c) GSB, Georgii Batanov gbatanov @ yandex.ru
+Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>
 */
 package modem
 
@@ -11,8 +24,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gbatanov/sim800l/event"
 )
 
 const RX_BUFFER_SIZE = 1024
@@ -28,22 +39,22 @@ type GsmModem struct {
 	toneCmd          string
 	toneCmdStarted   bool
 	Flag             bool
-	em               *event.EventEmitter
+	em               *EventEmitter
 	myPhoneNumber    string
 	myPhoneNumberSms string
 	CmdToController  chan string
 }
 
-func GsmModemCreate(port string, os string, baud int, phoneNumber string) *GsmModem {
+func GsmModemCreate(port string, baud int, phoneNumber string) *GsmModem {
 	gsm := GsmModem{}
-	gsm.uart = UartCreate(port, os, baud)
+	gsm.uart = UartCreate(port, baud)
 	gsm.rxBuff = make([]byte, 0, RX_BUFFER_SIZE)
 	gsm.txBuff = make([]byte, 0, TX_BUFFER_SIZE)
 	gsm.isCall = false
 	gsm.toneCmd = ""
 	gsm.toneCmdStarted = false
 	gsm.Flag = true
-	gsm.em = event.EventEmitterCreate()
+	gsm.em = EventEmitterCreate()
 	gsm.myPhoneNumber = phoneNumber
 	gsm.CmdToController = make(chan string, 1)
 
@@ -57,8 +68,6 @@ func GsmModemCreate(port string, os string, baud int, phoneNumber string) *GsmMo
 		phSms[i+1] = a
 	}
 	gsm.myPhoneNumberSms = string(phSms)
-
-	log.Println(gsm.myPhoneNumberSms)
 
 	return &gsm
 }

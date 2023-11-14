@@ -31,7 +31,7 @@ import (
 	"github.com/gbatanov/sim800l/modem"
 )
 
-const VERSION = "0.4.19"
+const VERSION = "0.4.20"
 const PORT = "/dev/tty.usbserial-A50285BI"
 const PHONE_NUMBER = "1234567890"
 

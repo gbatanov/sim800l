@@ -90,7 +90,7 @@ func (mdm *GsmModem) Open() error {
 				answer := string(buff)
 				parts := strings.Split(answer, "\r\r\n")
 				//
-				log.Printf("Answer on command: %s %s ", parts[0], parts[1])
+				//				log.Printf("Answer on command: %s %s ", parts[0], parts[1])
 				if strings.HasPrefix(parts[1], "+CMGR") { // Прочитано смс-сообщение
 					go func(msg string) {
 						mdm.handleSms(msg)
@@ -135,7 +135,7 @@ func (mdm *GsmModem) Open() error {
 							pos := strings.Index(answer, "+DTMF: ")
 							cmd := string([]byte(answer)[pos+7 : pos+8])
 							answer = string([]byte(answer)[pos+8:])
-							log.Printf("%v\n", []byte(cmd))
+							//							log.Printf("%v\n", []byte(cmd))
 							if mdm.toneCmdStarted {
 								if cmd == "#" {
 									mdm.toneCmdStarted = false
@@ -256,7 +256,7 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 		waitAnswer = waitAnswer + "\r\n"
 	}
 	if result == waitAnswer {
-		log.Println("Result sendCommand: Ответ совпал")
+		//		log.Println("Result sendCommand: Ответ совпал")
 		return true, nil
 	}
 	return false, errors.New(result)
@@ -264,7 +264,7 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 
 // Асинхронные команды
 func (mdm *GsmModem) sendCommandNoWait(cmd string) bool {
-	log.Println("Send command without waiting", cmd)
+	//	log.Println("Send command without waiting", cmd)
 	err := mdm.uart.Write([]byte(cmd))
 
 	return err == nil
@@ -290,21 +290,9 @@ func (mdm *GsmModem) showBalance(msg string) {
 	//	log.Printf("Balance2: %s\n", res)
 	res = strings.Replace(res, "002E", ".", -1)
 	log.Printf("Balance: %s\n", res)
-	/*
-		balance_ = res
-		// отправляем баланс в телеграм
-		if (app->withTlg)
-		 app->tlg32->send_message("Баланс: " + res + " руб.");
+	// Отправляем баланс в контроллер
+	mdm.CmdToController <- "/balance " + res
 
-		// если была команда запроса баланса с тонового набора
-		if (balance_to_sms)
-		{
-		  // отправляем баланс в смс
-		  send_sms("Balance " + res + " rub");
-		  balance_to_sms = false;
-		}
-		}
-	*/
 }
 
 // Тут еще не сама смс, а уведомление о ее поступлении и номером в буфере.
@@ -385,12 +373,12 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	msg = msg + buff + sms
 
 	cmd = "AT+CMGS=" + strconv.Itoa(msgLen) + "\r"
-	res, _ = mdm.sendCommand(cmd, "> ") //62 32
-	if res {
-		log.Println("Ответ > получен")
-	} else {
-		log.Println("Ответ > не получен")
-	}
+	mdm.sendCommand(cmd, "> ") //62 32
+	//	if res {
+	//		log.Println("Ответ > получен")
+	//	} else {
+	//		log.Println("Ответ > не получен")
+	//	}
 	cmdByte := []byte(msg)
 	cmdByte = append(cmdByte, 0x1A)
 	msg = string(cmdByte)
@@ -472,7 +460,7 @@ func (mdm *GsmModem) HangUp() {
 
 func (mdm *GsmModem) executeToneComand() {
 	mdm.HangOut()
-	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
+	//	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
 	mdm.CmdToController <- mdm.toneCmd
 	mdm.toneCmd = ""
 }

@@ -379,7 +379,8 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	msg := fmt.Sprintf("0011000B91%s0008C1", mdm.myPhoneNumberSms)
 	msg = msg + buff + sms
 
-	cmd = fmt.Sprintf("AT+CMGS=%d\r", msgLen)
+	//	cmd = fmt.Sprintf("AT+CMGS=%d\r", msgLen)
+	cmd = fmt.Sprintf("AT+CMGS=\"+79250109365\"\r")
 	res, _ = mdm.sendCommand(cmd, "> ") //62 32
 	if res {
 		log.Println("Ответ > получен")

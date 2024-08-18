@@ -177,7 +177,8 @@ func (mdm *GsmModem) Open() error {
 					log.Println("Не берут трубку")
 				} else {
 					log.Printf("Other: %s", string(buff))
-					mdm.em.SetEvent(string(buff), "OK")
+					log.Println(" ")
+					// mdm.em.SetEvent(string(buff), "OK")
 				}
 			}
 			time.Sleep(time.Second * 2)
@@ -267,8 +268,9 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 
 // Асинхронные команды
 func (mdm *GsmModem) sendCommandNoWait(cmd string) bool {
-	//	log.Println("Send command without waiting", cmd)
+	log.Println("Send command without waiting", cmd)
 	err := mdm.uart.Write([]byte(cmd))
+	log.Println("Send command without waiting", cmd, err)
 
 	return err == nil
 }
@@ -375,16 +377,16 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	// 46 - Длина текста сообщения
 	// Далее само сообщение в кодировке UCS2 (35 символов кириллицы, 70 байт, 2 байта на символ)
 
-	msg := "0011000B91" + mdm.myPhoneNumberSms + "0008C1"
+	msg := fmt.Sprintf("0011000B91%s0008C1", mdm.myPhoneNumberSms)
 	msg = msg + buff + sms
 
-	cmd = "AT+CMGS=" + strconv.Itoa(msgLen) + "\r"
+	cmd = fmt.Sprintf("AT+CMGS=%d\r", msgLen)
 	mdm.sendCommand(cmd, "> ") //62 32
-	//	if res {
-	//		log.Println("Ответ > получен")
-	//	} else {
-	//		log.Println("Ответ > не получен")
-	//	}
+	if res {
+		log.Println("Ответ > получен")
+	} else {
+		log.Println("Ответ > не получен")
+	}
 	cmdByte := []byte(msg)
 	cmdByte = append(cmdByte, 0x1A)
 	msg = string(cmdByte)

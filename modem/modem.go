@@ -360,7 +360,7 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	time.Sleep(time.Second * 3)
 	sms = mdm.convertSms(sms)
 	txtLen := len(sms) / 2
-	msgLen := txtLen + 14
+	//	msgLen := txtLen + 14
 	buff := fmt.Sprintf("%02X", txtLen)
 	//
 	// 00 - Длина и номер SMS центра. 0 - означает, что будет использоваться дефолтный номер.
@@ -379,8 +379,8 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	msg := fmt.Sprintf("0011000B91%s0008C1", mdm.myPhoneNumberSms)
 	msg = msg + buff + sms
 
-	//	cmd = fmt.Sprintf("AT+CMGS=%d\r", msgLen)
-	cmd = fmt.Sprintf("AT+CMGS=\"+79250109365\"\r")
+	//	cmd = fmt.Sprintf("AT+CMGS=%d\r", txtLen + 14)
+	cmd = `AT+CMGS="+79250109365"\r`
 	res, _ = mdm.sendCommand(cmd, "> ") //62 32
 	if res {
 		log.Println("Ответ > получен")

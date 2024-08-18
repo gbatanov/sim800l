@@ -268,7 +268,6 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 
 // Асинхронные команды
 func (mdm *GsmModem) sendCommandNoWait(cmd string) bool {
-	log.Println("Send command without waiting", cmd)
 	err := mdm.uart.Write([]byte(cmd))
 	log.Println("Send command without waiting", cmd, err)
 
@@ -381,19 +380,18 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	msg = msg + buff + sms
 
 	cmd = fmt.Sprintf("AT+CMGS=%d\r", msgLen)
-	mdm.sendCommand(cmd, "> ") //62 32
+	res, _ = mdm.sendCommand(cmd, "> ") //62 32
 	if res {
 		log.Println("Ответ > получен")
+		cmdByte := []byte(msg)
+		cmdByte = append(cmdByte, 0x1A)
+		res = mdm.sendCommandNoWait(string(cmdByte))
+		//	res, _ = mdm.sendCommand(msg, "OK")
+		if res {
+			log.Println("Сообщение отправлено")
+		}
 	} else {
 		log.Println("Ответ > не получен")
-	}
-	cmdByte := []byte(msg)
-	cmdByte = append(cmdByte, 0x1A)
-	msg = string(cmdByte)
-	res = mdm.sendCommandNoWait(msg)
-	//	res, _ = mdm.sendCommand(msg, "OK")
-	if res {
-		log.Println("Сообщение отправлено")
 	}
 
 	cmd = "AT+CMGF=1\r"

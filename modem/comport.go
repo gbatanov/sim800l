@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+Copyright (c) 2023-2024 GSB, Georgii Batanov gbatanov@yandex.ru
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/tarm/serial"
+	"golang.org/x/net/context"
 )
 
 const SOF byte = 0xFE
@@ -89,61 +90,68 @@ func (u Uart) Write(text []byte) error {
 
 // The cycle of receiving commands from SIM800l
 // in this serial port library version we get chunks 64 byte size !!!
-func (u *Uart) Loop(cmdinput chan []byte) {
+func (u *Uart) Loop(ctx context.Context, cmdinput chan []byte) {
 	BufRead := make([]byte, 256)
 	BufReadResult := make([]byte, 0)
 	k := 0
 	for u.Flag {
-		n, err := u.comport.Read(BufRead)
-		if err != nil {
-			if n != 0 {
-				u.Flag = false
-			}
-		} else if err == nil && n > 0 {
+		select {
+		case <-ctx.Done():
+			u.Flag = false
+			cmdinput <- []byte{}
+		default:
 
-			BufReadResult = append(BufReadResult, BufRead[:n]...)
-			k += n
-			//			log.Printf("1.Received: %v \n", BufReadResult[:k])
-
-			cnt := strings.Count(string(BufReadResult[:k]), "\r\n")
-			if cnt > 1 {
-				// Надо найти последнее вхождение \r\n и если после него есть
-				// еще символы, их надо перенести в следующий буфер вместе с \r\n
-				//
-				// k-1 - последний символ
-				// k-2 - предпоследний
-				log.Printf("2.Received: %v \n", BufReadResult[:k])
-				if BufReadResult[k-2] == '\r' && BufReadResult[k-1] == '\n' {
-					cmdinput <- BufReadResult[:k]
-					BufReadResult = make([]byte, 0)
-					k = 0
-				} else {
-					z := k - 1
-					for BufReadResult[z] != '\r' {
-						z = z - 1
-					}
-
-					cmdinput <- BufReadResult[:z]
-					BufReadResult = BufReadResult[z:k]
-					k = k - z
+			n, err := u.comport.Read(BufRead)
+			if err != nil {
+				if n != 0 {
+					u.Flag = false
 				}
-			} else {
-				//проверим на > ответ на первую часть отправки СМС
-				if k > 2 {
-					if BufReadResult[k-2] == '>' && BufReadResult[k-1] == ' ' {
-						//log.Printf("3.Received: %v \n", BufReadResult[:k])
+			} else if n > 0 {
+
+				BufReadResult = append(BufReadResult, BufRead[:n]...)
+				k += n
+				//			log.Printf("1.Received: %v \n", BufReadResult[:k])
+
+				cnt := strings.Count(string(BufReadResult[:k]), "\r\n")
+				if cnt > 1 {
+					// Надо найти последнее вхождение \r\n и если после него есть
+					// еще символы, их надо перенести в следующий буфер вместе с \r\n
+					//
+					// k-1 - последний символ
+					// k-2 - предпоследний
+					log.Printf("2.Received: %v %s \n", BufReadResult[:k], BufReadResult[:k])
+					if BufReadResult[k-2] == '\r' && BufReadResult[k-1] == '\n' {
 						cmdinput <- BufReadResult[:k]
 						BufReadResult = make([]byte, 0)
 						k = 0
+					} else {
+						z := k - 1
+						for BufReadResult[z] != '\r' {
+							z = z - 1
+						}
+
+						cmdinput <- BufReadResult[:z]
+						BufReadResult = BufReadResult[z:k]
+						k = k - z
+					}
+				} else {
+					//проверим на > ответ на первую часть отправки СМС
+					if k > 2 {
+						if BufReadResult[k-2] == '>' && BufReadResult[k-1] == ' ' {
+							//log.Printf("3.Received: %v \n", BufReadResult[:k])
+							cmdinput <- BufReadResult[:k]
+							BufReadResult = make([]byte, 0)
+							k = 0
+						}
 					}
 				}
-			}
 
-			// if there is no command, wait 1 sec, меньше секунды показывает нестабильный результат
-			time.Sleep(1000 * time.Millisecond)
-		}
-		for i := 0; i < n; i++ {
-			BufRead[i] = 0
+				// if there is no command, wait 1 sec, меньше секунды показывает нестабильный результат
+				time.Sleep(1000 * time.Millisecond)
+			}
+			for i := 0; i < n; i++ {
+				BufRead[i] = 0
+			}
 		}
 	}
 }

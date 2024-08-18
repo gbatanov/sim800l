@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+Copyright (c) 2023-2024 GSB, Georgii Batanov gbatanov@yandex.ru
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 
 	"time"
 
@@ -31,9 +32,9 @@ import (
 	"github.com/gbatanov/sim800l/modem"
 )
 
-const VERSION = "0.4.19"
-const PORT = "/dev/tty.usbserial-A50285BI"
-const PHONE_NUMBER = "1234567890"
+const VERSION = "0.4.30"
+const PORT = "/dev/cu.usbserial-A50285BI" //"/dev/ttyUSB0"
+const PHONE_NUMBER = "9250109365"
 
 // Пример использования пакета sim800l/modem
 func main() {
@@ -41,6 +42,9 @@ func main() {
 	Flag := true
 
 	phoneNumber := PHONE_NUMBER
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	sigs := make(chan os.Signal, 1)
 	// signal.Notify registers this channel to receive notifications of the specified signals.
@@ -54,7 +58,7 @@ func main() {
 	}()
 
 	mdm := modem.GsmModemCreate(PORT, 9600, phoneNumber)
-	err := mdm.Open()
+	err := mdm.Open(ctx)
 
 	if err != nil {
 		return
@@ -65,26 +69,32 @@ func main() {
 	wg.Add(1)
 	go func() {
 		for Flag {
-			reader := bufio.NewReader(os.Stdin)
-			text, _ := reader.ReadString('\n')
-			if len(text) > 1 { // text включает завершающий \n
-				// log.Printf("%v", []byte(text))
-				switch text {
-				case "q\n":
-					Flag = false
-				case "balance\n":
-					mdm.GetBalance()
-				case "sms\n":
-					mdm.SendSms("Ёлки-палки 2023 USSR")
-				case "call\n":
-					mdm.CallMain() // звонок на основной номер
-				case "up\n":
-					mdm.HangUp() // поднять трубку
-				case "down\n":
-					mdm.HangOut() // сбросить звонок
-				} //switch
-			} else {
-				time.Sleep(time.Second * 3)
+			select {
+			case <-ctx.Done():
+				Flag = false
+				return
+			default:
+				reader := bufio.NewReader(os.Stdin)
+				text, _ := reader.ReadString('\n')
+				if len(text) > 1 { // text включает завершающий \n
+					// log.Printf("%v", []byte(text))
+					switch text {
+					case "q\n":
+						Flag = false
+					case "balance\n":
+						mdm.GetBalance()
+					case "sms\n":
+						mdm.SendSms("Ёлки-палки 2023 USSR")
+					case "call\n":
+						mdm.CallMain() // звонок на основной номер
+					case "up\n":
+						mdm.HangUp() // поднять трубку
+					case "down\n":
+						mdm.HangOut() // сбросить звонок
+					} //switch
+				} else {
+					time.Sleep(time.Second * 3)
+				}
 			}
 		} //for
 		wg.Done()

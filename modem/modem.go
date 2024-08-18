@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+Copyright (c) 2023-24 GSB, Georgii Batanov gbatanov@yandex.ru
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>
 package modem
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -72,114 +73,129 @@ func GsmModemCreate(port string, baud int, phoneNumber string) *GsmModem {
 	return &gsm
 }
 
-func (mdm *GsmModem) Open() error {
+func (mdm *GsmModem) Open(ctx context.Context) error {
 	err := mdm.uart.Open()
 	if err != nil {
 		return err
 	}
 
-	go mdm.uart.Loop(CmdInput)
+	go mdm.uart.Loop(ctx, CmdInput)
 
 	// Цикл обработки принятых сообщений
 	go func() {
 
 		for mdm.Flag {
-			buff := <-CmdInput
+			select {
+			case <-ctx.Done():
+				mdm.Flag = false
+			default:
 
-			if strings.Contains(string(buff), "\r\r\n") { // Ответ на команду
-				answer := string(buff)
-				parts := strings.Split(answer, "\r\r\n")
-				//
-				log.Printf("Answer on command: %s %s ", parts[0], parts[1])
-				if strings.HasPrefix(parts[1], "+CMGR") { // Прочитано смс-сообщение
-					go func(msg string) {
-						mdm.handleSms(msg)
-					}(answer)
-				} else if strings.HasPrefix(parts[1], "+CMGS") { // Передано смс-сообщение
-					// Реально сюда не придет, потому что в качестве команды будет отправленное сообщение,
-					// оно не завершается отправкой \r, а завершается \z, которое не приходит обратно
-					mdm.em.SetEvent(parts[0]+"\r", "OK\r\n")
-				} else if strings.HasPrefix(parts[1], "+COLP") { // ответ на вызов
-					if strings.Contains(parts[1], "\r\n\r\n") {
-						partsAnsw := strings.Split(parts[1], "\r\n\r\n")
-						mdm.em.SetEvent(parts[0]+"\r", partsAnsw[1])
-					}
-				} else {
-					mdm.em.SetEvent(parts[0]+"\r", parts[1])
+				buff := <-CmdInput
+				if len(buff) == 0 {
+					return
 				}
-			} else if strings.HasPrefix(string(buff), "\r\n+") { //+CMTI, +CLIP, +CUSD, +CMGR
-				// Сообщения, которые могут придти в произвольное время
-				answer := string(buff[2:])
-				log.Printf("Unexpected command: %s", answer)
-				if strings.HasPrefix(answer, "+CUSD") { // ответ на запрос баланса
-					go func(msg string) {
-						mdm.showBalance(msg)
-					}(answer)
-				} else if strings.HasPrefix(answer, "+CMTI") { // Пришло смс-сообщение
-					go func(msg string) {
-						mdm.readSms(msg)
-					}(answer)
-				} else if strings.HasPrefix(answer, "+CMGR") { // Прочитано смс-сообщение
-					go func(msg string) {
-						mdm.handleSms(msg)
-					}(answer)
-				} else if strings.HasPrefix(answer, "+CLIP") { // АОН на входящий звонок
-					go func(msg string) {
-						mdm.checkNumber(msg)
-					}(answer)
-				} else if strings.HasPrefix(answer, "+DTMF") { // тоновые команды, обработаем синхронно
-					if mdm.isCall {
-						// в ответе может придти несколько команд +DTMF
-						dtmfCount := strings.Count(answer, "+DTMF: ")
-						for dtmfCount > 0 {
-							pos := strings.Index(answer, "+DTMF: ")
-							cmd := string([]byte(answer)[pos+7 : pos+8])
-							answer = string([]byte(answer)[pos+8:])
-							log.Printf("%v\n", []byte(cmd))
-							if mdm.toneCmdStarted {
-								if cmd == "#" {
-									mdm.toneCmdStarted = false
-									// дать отбой и выполнить команду
-									go func() {
-										mdm.executeToneComand()
-									}()
-								} else {
-									mdm.toneCmd += cmd
+				log.Printf("buff %v %s \n", buff, buff)
+				if strings.Contains(string(buff), "\r\r\n") { // Ответ на команду
+					answer := string(buff)
+					parts := strings.Split(answer, "\r\r\n")
+					//
+					//				log.Printf("Answer on command: %s %s ", parts[0], parts[1])
+					if strings.HasPrefix(parts[1], "+CMGR") { // Прочитано смс-сообщение
+						go func(msg string) {
+							mdm.handleSms(msg)
+						}(answer)
+					} else if strings.HasPrefix(parts[1], "+CMGS") { // Передано смс-сообщение
+						log.Println("+CMGS 1")
+						// Реально сюда не придет, потому что в качестве команды будет отправленное сообщение,
+						// оно не завершается отправкой \r, а завершается \z, которое не приходит обратно
+						mdm.em.SetEvent(parts[0]+"\r", "OK\r\n")
+					} else if strings.HasPrefix(parts[1], "+COLP") { // ответ на вызов
+						if strings.Contains(parts[1], "\r\n\r\n") {
+							partsAnsw := strings.Split(parts[1], "\r\n\r\n")
+							mdm.em.SetEvent(parts[0]+"\r", partsAnsw[1])
+						}
+					} else {
+						mdm.em.SetEvent(parts[0]+"\r", parts[1])
+					}
+				} else if strings.HasPrefix(string(buff), "\r\n+") { //+CMTI, +CLIP, +CUSD, +CMGR
+					// Сообщения, которые могут придти в произвольное время
+					answer := string(buff[2:])
+					log.Printf("Unexpected command: %s", answer)
+					if strings.HasPrefix(answer, "+CUSD") { // ответ на запрос баланса
+						go func(msg string) {
+							mdm.showBalance(msg)
+						}(answer)
+					} else if strings.HasPrefix(answer, "+CMTI") { // Пришло смс-сообщение
+						go func(msg string) {
+							mdm.readSms(msg)
+						}(answer)
+					} else if strings.HasPrefix(answer, "+CMGR") { // Прочитано смс-сообщение
+						go func(msg string) {
+							mdm.handleSms(msg)
+						}(answer)
+					} else if strings.HasPrefix(answer, "+CLIP") { // АОН на входящий звонок
+						go func(msg string) {
+							mdm.checkNumber(msg)
+						}(answer)
+					} else if strings.HasPrefix(answer, "+DTMF") { // тоновые команды, обработаем синхронно
+						if mdm.isCall {
+							// в ответе может придти несколько команд +DTMF
+							dtmfCount := strings.Count(answer, "+DTMF: ")
+							for dtmfCount > 0 {
+								pos := strings.Index(answer, "+DTMF: ")
+								cmd := string([]byte(answer)[pos+7 : pos+8])
+								answer = string([]byte(answer)[pos+8:])
+								//							log.Printf("%v\n", []byte(cmd))
+								if mdm.toneCmdStarted {
+									if cmd == "#" {
+										mdm.toneCmdStarted = false
+										// дать отбой и выполнить команду
+										go func() {
+											mdm.executeToneComand()
+										}()
+									} else {
+										mdm.toneCmd += cmd
+									}
+								} else if cmd == "*" {
+									mdm.toneCmdStarted = true
 								}
-							} else if cmd == "*" {
-								mdm.toneCmdStarted = true
+								dtmfCount = strings.Count(answer, "+DTMF: ")
 							}
-							dtmfCount = strings.Count(answer, "+DTMF: ")
 						}
 					}
-				}
-			} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+71234567890",145,"",0,"",0)
-				// можно поделить на две "нормальных" команды - если подряд идут \r\n\r\n, по этому месту делим на две команды
-				answer := string(buff[2:])
-				log.Printf("Unexpected command: %s", answer)
+				} else if strings.HasPrefix(string(buff), "\r\nRING") { //RING входящий вызов (после него идет +CLIP c номером: +CLIP: "+71234567890",145,"",0,"",0)
+					// можно поделить на две "нормальных" команды - если подряд идут \r\n\r\n, по этому месту делим на две команды
+					answer := string(buff[2:])
+					log.Printf("Unexpected command: %s", answer)
 
-				if strings.Contains(answer, "+CLIP:") { // Входящий звонок, АОН пришел сразу
-					if strings.Contains(answer, "\r\n\r\n") {
-						answerParts := strings.Split(answer, "\r\n\r\n")
-						answer = "\r\n" + answerParts[1]
+					if strings.Contains(answer, "+CLIP:") { // Входящий звонок, АОН пришел сразу
+						if strings.Contains(answer, "\r\n\r\n") {
+							answerParts := strings.Split(answer, "\r\n\r\n")
+							answer = "\r\n" + answerParts[1]
+						}
+						go func(msg string) {
+							mdm.checkNumber(msg)
+						}(answer)
 					}
-					go func(msg string) {
-						mdm.checkNumber(msg)
-					}(answer)
+				} else if strings.Contains(string(buff), "\r\n+CMGS") { // Ответ на окончательную отправку СМС
+					log.Printf("CMGS 2 SMS sended: %s", string(buff))
+					pos := strings.Index(string(buff), "\r\n+CMGS")
+					buff = append(buff[:pos], 0x1A)
+					mdm.em.SetEvent(string(buff), "OK\r\n")
+					cmd := "AT+CMGF=1\r"
+					mdm.sendCommand(cmd, "OK")
+
+				} else { // NO CARRIER (положили трубку),
+					if string(buff) == "\r\nNO CARRIER\r\n" {
+						log.Println("Не берут трубку")
+					} else {
+						log.Printf("Other: %s", string(buff))
+						log.Println(" ")
+						// mdm.em.SetEvent(string(buff), "OK")
+					}
 				}
-			} else if strings.Contains(string(buff), "\r\n+CMGS") { // Ответ на окончательную отправку СМС
-				log.Printf("SMS sended: %s", string(buff))
-				pos := strings.Index(string(buff), "\r\n+CMGS")
-				buff = append(buff[:pos], 0x1A)
-				mdm.em.SetEvent(string(buff), "OK\r\n")
-			} else { // NO CARRIER (положили трубку),
-				if string(buff) == "\r\nNO CARRIER\r\n" {
-					log.Println("Не берут трубку")
-				} else {
-					log.Printf("Other: %s", string(buff))
-				}
+				time.Sleep(time.Second * 2)
 			}
-			time.Sleep(time.Second * 2)
 		}
 	}()
 	// инициализацию модема делаем синхронно
@@ -217,6 +233,7 @@ func (mdm *GsmModem) InitModem() {
 	mdm.sendCommand("AT+DDET=1,0,0\r", "OK")
 	mdm.sendCommand("AT+CMGD=1,4\r", "OK") // Удаление всех сообщений, второй вариант
 	mdm.sendCommand("AT+COLP=1\r", "OK")
+	mdm.sendCommand(`AT+CMGDA="DEL ALL"\r`, "OK")
 	log.Println("Модем инициализирован")
 }
 
@@ -247,7 +264,7 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 	}
 	result, err := mdm.em.WaitEvent(cmd, time.Second*60) // минута нужна для правильного ответа на исходящий звонок,
 	//														иначе всегда будет Timeout, если не берут трубку
-	//	log.Println("Result1:" + result)
+	log.Println("Result1:" + result)
 	if err != nil {
 		return false, err
 	}
@@ -258,14 +275,16 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 	if result == waitAnswer {
 		log.Println("Result sendCommand: Ответ совпал")
 		return true, nil
+	} else {
+		log.Println("Result sendCommand: ", result, waitAnswer)
 	}
 	return false, errors.New(result)
 }
 
 // Асинхронные команды
 func (mdm *GsmModem) sendCommandNoWait(cmd string) bool {
-	log.Println("Send command without waiting", cmd)
 	err := mdm.uart.Write([]byte(cmd))
+	log.Println("Send command without waiting", cmd, err)
 
 	return err == nil
 }
@@ -281,30 +300,21 @@ func (mdm *GsmModem) GetBalance() bool {
 
 // Проверено только для абонентов Мегафона
 func (mdm *GsmModem) showBalance(msg string) {
+	var res string
+
 	pos := strings.Index(msg, "\"")
-	res := string([]byte(msg)[pos+1:])
+	res = string([]byte(msg)[pos+1:])
 	pos2 := strings.Index(res, "00200440002E")
 	res = string([]byte(res)[:pos2])
+
 	//	log.Printf("Balance1: %s\n", res)
 	res = strings.Replace(res, "003", "", -1) // -1 - all
 	//	log.Printf("Balance2: %s\n", res)
 	res = strings.Replace(res, "002E", ".", -1)
 	log.Printf("Balance: %s\n", res)
-	/*
-		balance_ = res
-		// отправляем баланс в телеграм
-		if (app->withTlg)
-		 app->tlg32->send_message("Баланс: " + res + " руб.");
+	// Отправляем баланс в контроллер
+	mdm.CmdToController <- "/balance " + res
 
-		// если была команда запроса баланса с тонового набора
-		if (balance_to_sms)
-		{
-		  // отправляем баланс в смс
-		  send_sms("Balance " + res + " rub");
-		  balance_to_sms = false;
-		}
-		}
-	*/
 }
 
 // Тут еще не сама смс, а уведомление о ее поступлении и номером в буфере.
@@ -365,7 +375,7 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	time.Sleep(time.Second * 3)
 	sms = mdm.convertSms(sms)
 	txtLen := len(sms) / 2
-	msgLen := txtLen + 14
+	//	msgLen := txtLen + 14
 	buff := fmt.Sprintf("%02X", txtLen)
 	//
 	// 00 - Длина и номер SMS центра. 0 - означает, что будет использоваться дефолтный номер.
@@ -381,24 +391,24 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	// 46 - Длина текста сообщения
 	// Далее само сообщение в кодировке UCS2 (35 символов кириллицы, 70 байт, 2 байта на символ)
 
-	msg := "0011000B91" + mdm.myPhoneNumberSms + "0008C1"
+	msg := fmt.Sprintf("0011000B91%s0008C1", mdm.myPhoneNumberSms)
 	msg = msg + buff + sms
 
-	cmd = "AT+CMGS=" + strconv.Itoa(msgLen) + "\r"
+	cmd = fmt.Sprintf("AT+CMGS=%d\r", txtLen+14)
 	res, _ = mdm.sendCommand(cmd, "> ") //62 32
 	if res {
 		log.Println("Ответ > получен")
+		cmdByte := []byte(msg)
+		cmdByte = append(cmdByte, 0x1A)
+		res = mdm.sendCommandNoWait(string(cmdByte))
+		//	res, _ = mdm.sendCommand(msg, "OK")
+		if res {
+			log.Println("Сообщение отправлено")
+		}
 	} else {
 		log.Println("Ответ > не получен")
 	}
-	cmdByte := []byte(msg)
-	cmdByte = append(cmdByte, 0x1A)
-	msg = string(cmdByte)
-	res, _ = mdm.sendCommand(msg, "OK")
-	if res {
-		log.Println("Сообщение отправлено")
-	}
-
+	time.Sleep(30 * time.Second)
 	cmd = "AT+CMGF=1\r"
 	mdm.sendCommand(cmd, "OK")
 	return res
@@ -472,7 +482,7 @@ func (mdm *GsmModem) HangUp() {
 
 func (mdm *GsmModem) executeToneComand() {
 	mdm.HangOut()
-	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
+	//	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
 	mdm.CmdToController <- mdm.toneCmd
 	mdm.toneCmd = ""
 }

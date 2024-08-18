@@ -388,7 +388,8 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	cmdByte := []byte(msg)
 	cmdByte = append(cmdByte, 0x1A)
 	msg = string(cmdByte)
-	res, _ = mdm.sendCommand(msg, "OK")
+	res = mdm.sendCommandNoWait(msg)
+	//	res, _ = mdm.sendCommand(msg, "OK")
 	if res {
 		log.Println("Сообщение отправлено")
 	}

@@ -177,6 +177,7 @@ func (mdm *GsmModem) Open() error {
 					log.Println("Не берут трубку")
 				} else {
 					log.Printf("Other: %s", string(buff))
+					mdm.em.SetEvent(string(buff), "OK")
 				}
 			}
 			time.Sleep(time.Second * 2)
@@ -251,13 +252,15 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	log.Println("Result2:" + result)
+	//	log.Println("Result2:" + result)
 	if waitAnswer != "> " { // Приглашение на ввод СМС не завершается \r\n
 		waitAnswer = waitAnswer + "\r\n"
 	}
 	if result == waitAnswer {
 		log.Println("Result sendCommand: Ответ совпал")
 		return true, nil
+	} else {
+		log.Println("Result sendCommand: ", result, waitAnswer)
 	}
 	return false, errors.New(result)
 }

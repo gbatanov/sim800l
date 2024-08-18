@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+Copyright (c) 2023-2024 GSB, Georgii Batanov gbatanov@yandex.ru
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ import (
 	"github.com/gbatanov/sim800l/modem"
 )
 
-const VERSION = "0.4.20"
+const VERSION = "0.4.21"
 const PORT = "/dev/tty.usbserial-A50285BI"
 const PHONE_NUMBER = "1234567890"
 

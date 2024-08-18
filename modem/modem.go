@@ -111,7 +111,7 @@ func (mdm *GsmModem) Open() error {
 				// Сообщения, которые могут придти в произвольное время
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)
-				if strings.HasPrefix(answer, "+CUSD") || strings.HasPrefix(answer, "0011000B919752109063F50008C10C") { // ответ на запрос баланса
+				if strings.HasPrefix(answer, "+CUSD") { // ответ на запрос баланса
 					go func(msg string) {
 						mdm.showBalance(msg)
 					}(answer)
@@ -247,16 +247,16 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 	}
 	result, err := mdm.em.WaitEvent(cmd, time.Second*60) // минута нужна для правильного ответа на исходящий звонок,
 	//														иначе всегда будет Timeout, если не берут трубку
-	//	log.Println("Result1:" + result)
+	log.Println("Result1:" + result)
 	if err != nil {
 		return false, err
 	}
-	//	log.Println("Result2:" + result)
+	log.Println("Result2:" + result)
 	if waitAnswer != "> " { // Приглашение на ввод СМС не завершается \r\n
 		waitAnswer = waitAnswer + "\r\n"
 	}
 	if result == waitAnswer {
-		//		log.Println("Result sendCommand: Ответ совпал")
+		log.Println("Result sendCommand: Ответ совпал")
 		return true, nil
 	}
 	return false, errors.New(result)
@@ -282,14 +282,12 @@ func (mdm *GsmModem) GetBalance() bool {
 // Проверено только для абонентов Мегафона
 func (mdm *GsmModem) showBalance(msg string) {
 	var res string
-	if strings.HasPrefix(msg, "0011000B919752109063F50008C10C") { // Новый формат ответа?
-		res = strings.ReplaceAll(msg, "0011000B919752109063F50008C10C", "")
-	} else {
-		pos := strings.Index(msg, "\"")
-		res = string([]byte(msg)[pos+1:])
-		pos2 := strings.Index(res, "00200440002E")
-		res = string([]byte(res)[:pos2])
-	}
+
+	pos := strings.Index(msg, "\"")
+	res = string([]byte(msg)[pos+1:])
+	pos2 := strings.Index(res, "00200440002E")
+	res = string([]byte(res)[:pos2])
+
 	//	log.Printf("Balance1: %s\n", res)
 	res = strings.Replace(res, "003", "", -1) // -1 - all
 	//	log.Printf("Balance2: %s\n", res)

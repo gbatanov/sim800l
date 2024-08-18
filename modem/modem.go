@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+Copyright (c) 2023-24 GSB, Georgii Batanov gbatanov@yandex.ru
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -111,7 +111,7 @@ func (mdm *GsmModem) Open() error {
 				// Сообщения, которые могут придти в произвольное время
 				answer := string(buff[2:])
 				log.Printf("Unexpected command: %s", answer)
-				if strings.HasPrefix(answer, "+CUSD") { // ответ на запрос баланса
+				if strings.HasPrefix(answer, "+CUSD") || strings.HasPrefix(answer, "0011000B919752109063F50008C10C") { // ответ на запрос баланса
 					go func(msg string) {
 						mdm.showBalance(msg)
 					}(answer)
@@ -281,10 +281,15 @@ func (mdm *GsmModem) GetBalance() bool {
 
 // Проверено только для абонентов Мегафона
 func (mdm *GsmModem) showBalance(msg string) {
-	pos := strings.Index(msg, "\"")
-	res := string([]byte(msg)[pos+1:])
-	pos2 := strings.Index(res, "00200440002E")
-	res = string([]byte(res)[:pos2])
+	var res string
+	if strings.HasPrefix(msg, "0011000B919752109063F50008C10C") { // Новый формат ответа?
+		res = strings.ReplaceAll(msg, "0011000B919752109063F50008C10C", "")
+	} else {
+		pos := strings.Index(msg, "\"")
+		res = string([]byte(msg)[pos+1:])
+		pos2 := strings.Index(res, "00200440002E")
+		res = string([]byte(res)[:pos2])
+	}
 	//	log.Printf("Balance1: %s\n", res)
 	res = strings.Replace(res, "003", "", -1) // -1 - all
 	//	log.Printf("Balance2: %s\n", res)

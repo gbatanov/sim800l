@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023 GSB, Georgii Batanov gbatanov@yandex.ru
+Copyright (c) 2023-2024 GSB, Georgii Batanov gbatanov@yandex.ru
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -99,7 +99,7 @@ func (u *Uart) Loop(cmdinput chan []byte) {
 			if n != 0 {
 				u.Flag = false
 			}
-		} else if err == nil && n > 0 {
+		} else if n > 0 {
 
 			BufReadResult = append(BufReadResult, BufRead[:n]...)
 			k += n

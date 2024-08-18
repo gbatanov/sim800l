@@ -31,9 +31,9 @@ import (
 	"github.com/gbatanov/sim800l/modem"
 )
 
-const VERSION = "0.4.21"
-const PORT = "/dev/tty.usbserial-A50285BI"
-const PHONE_NUMBER = "1234567890"
+const VERSION = "0.4.22"
+const PORT = "/dev/ttyUSB0"
+const PHONE_NUMBER = "7250109366"
 
 // Пример использования пакета sim800l/modem
 func main() {

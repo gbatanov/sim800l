@@ -94,7 +94,7 @@ func (mdm *GsmModem) Open(ctx context.Context) error {
 				if len(buff) == 0 {
 					return
 				}
-				log.Printf("buff %v %s \n", buff, buff)
+				//				log.Printf("buff %v %s \n", buff, buff)
 				if strings.Contains(string(buff), "\r\r\n") { // Ответ на команду
 					answer := string(buff)
 					parts := strings.Split(answer, "\r\r\n")
@@ -187,7 +187,7 @@ func (mdm *GsmModem) Open(ctx context.Context) error {
 
 				} else { // NO CARRIER (положили трубку),
 					if string(buff) == "\r\nNO CARRIER\r\n" {
-						log.Println("Не берут трубку")
+						log.Println("Не берут/положили трубку")
 					} else {
 						log.Printf("Other: %s", string(buff))
 						log.Println(" ")
@@ -205,6 +205,7 @@ func (mdm *GsmModem) Open(ctx context.Context) error {
 }
 func (mdm *GsmModem) Stop() {
 	mdm.uart.Stop()
+	close(mdm.CmdToController)
 	log.Printf("Modem stop")
 }
 
@@ -233,7 +234,6 @@ func (mdm *GsmModem) InitModem() {
 	mdm.sendCommand("AT+DDET=1,0,0\r", "OK")
 	mdm.sendCommand("AT+CMGD=1,4\r", "OK") // Удаление всех сообщений, второй вариант
 	mdm.sendCommand("AT+COLP=1\r", "OK")
-	mdm.sendCommand(`AT+CMGDA="DEL ALL"\r`, "OK")
 	log.Println("Модем инициализирован")
 }
 
@@ -264,7 +264,7 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 	}
 	result, err := mdm.em.WaitEvent(cmd, time.Second*60) // минута нужна для правильного ответа на исходящий звонок,
 	//														иначе всегда будет Timeout, если не берут трубку
-	log.Println("Result1:" + result)
+	//	log.Println("Result1:" + result)
 	if err != nil {
 		return false, err
 	}
@@ -273,7 +273,7 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 		waitAnswer = waitAnswer + "\r\n"
 	}
 	if result == waitAnswer {
-		log.Println("Result sendCommand: Ответ совпал")
+		//		log.Println("Result sendCommand: Ответ совпал")
 		return true, nil
 	} else {
 		log.Println("Result sendCommand: ", result, waitAnswer)
@@ -284,7 +284,7 @@ func (mdm *GsmModem) sendCommand(cmd string, waitAnswer string) (bool, error) {
 // Асинхронные команды
 func (mdm *GsmModem) sendCommandNoWait(cmd string) bool {
 	err := mdm.uart.Write([]byte(cmd))
-	log.Println("Send command without waiting", cmd, err)
+	//	log.Println("Send command without waiting", cmd, err)
 
 	return err == nil
 }
@@ -397,11 +397,10 @@ func (mdm *GsmModem) SendSms(sms string) bool {
 	cmd = fmt.Sprintf("AT+CMGS=%d\r", txtLen+14)
 	res, _ = mdm.sendCommand(cmd, "> ") //62 32
 	if res {
-		log.Println("Ответ > получен")
+		//		log.Println("Ответ > получен")
 		cmdByte := []byte(msg)
 		cmdByte = append(cmdByte, 0x1A)
 		res = mdm.sendCommandNoWait(string(cmdByte))
-		//	res, _ = mdm.sendCommand(msg, "OK")
 		if res {
 			log.Println("Сообщение отправлено")
 		}
@@ -482,7 +481,7 @@ func (mdm *GsmModem) HangUp() {
 
 func (mdm *GsmModem) executeToneComand() {
 	mdm.HangOut()
-	//	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
+	log.Printf("Исполняем команду %s \n", mdm.toneCmd)
 	mdm.CmdToController <- mdm.toneCmd
 	mdm.toneCmd = ""
 }

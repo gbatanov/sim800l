@@ -23,6 +23,7 @@ import (
 
 	"time"
 
+	_ "embed"
 	"log"
 	"os"
 	"os/signal"
@@ -32,7 +33,9 @@ import (
 	"github.com/gbatanov/sim800l/modem"
 )
 
-const VERSION = "0.4.30"
+//go:embed version.txt
+var VERSION string
+
 const PORT = "/dev/cu.usbserial-A50285BI" //"/dev/ttyUSB0"
 const PHONE_NUMBER = "9250109365"
 
@@ -45,6 +48,7 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	reader := bufio.NewReader(os.Stdin)
 
 	sigs := make(chan os.Signal, 1)
 	// signal.Notify registers this channel to receive notifications of the specified signals.
@@ -55,6 +59,7 @@ func main() {
 		sig := <-sigs
 		log.Println(sig)
 		Flag = false
+		cancel()
 	}()
 
 	mdm := modem.GsmModemCreate(PORT, 9600, phoneNumber)
@@ -73,26 +78,25 @@ func main() {
 			case <-ctx.Done():
 				Flag = false
 				return
+			case tcmd := <-mdm.CmdToController:
+				log.Println(tcmd)
 			default:
-				reader := bufio.NewReader(os.Stdin)
-				text, _ := reader.ReadString('\n')
-				if len(text) > 1 { // text включает завершающий \n
-					// log.Printf("%v", []byte(text))
-					switch text {
-					case "q\n":
-						Flag = false
-					case "balance\n":
-						mdm.GetBalance()
-					case "sms\n":
-						mdm.SendSms("Ёлки-палки 2023 USSR")
-					case "call\n":
-						mdm.CallMain() // звонок на основной номер
-					case "up\n":
-						mdm.HangUp() // поднять трубку
-					case "down\n":
-						mdm.HangOut() // сбросить звонок
-					} //switch
-				} else {
+				text, _ := reader.ReadString('\n') //  здесь висит
+				log.Printf("%v", []byte(text))
+				switch text {
+				case "q\n":
+					Flag = false
+				case "balance\n":
+					mdm.GetBalance()
+				case "sms\n":
+					mdm.SendSms("Ёлки-палки 2023 USSR")
+				case "call\n":
+					mdm.CallMain() // звонок на основной номер
+				case "up\n":
+					mdm.HangUp() // поднять трубку
+				case "down\n":
+					mdm.HangOut() // сбросить звонок
+				default:
 					time.Sleep(time.Second * 3)
 				}
 			}

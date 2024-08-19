@@ -98,7 +98,7 @@ func (u *Uart) Loop(ctx context.Context, cmdinput chan []byte) {
 		select {
 		case <-ctx.Done():
 			u.Flag = false
-			cmdinput <- []byte{}
+			close(cmdinput)
 		default:
 
 			n, err := u.comport.Read(BufRead)
@@ -119,7 +119,7 @@ func (u *Uart) Loop(ctx context.Context, cmdinput chan []byte) {
 					//
 					// k-1 - последний символ
 					// k-2 - предпоследний
-					log.Printf("2.Received: %v %s \n", BufReadResult[:k], BufReadResult[:k])
+					//					log.Printf("2.Received: %v %s \n", BufReadResult[:k], BufReadResult[:k])
 					if BufReadResult[k-2] == '\r' && BufReadResult[k-1] == '\n' {
 						cmdinput <- BufReadResult[:k]
 						BufReadResult = make([]byte, 0)

@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023-2024 GSB, Georgii Batanov gbatanov@yandex.ru
+Copyright (c) 2023-2025 GSB, Georgii Batanov gbatanov@yandex.ru
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

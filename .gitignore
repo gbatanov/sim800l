@@ -1,4 +1,4 @@
 *.exe
 tkn.txt
-main.go
 go.sum
+sim800l

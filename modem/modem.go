@@ -1,6 +1,6 @@
 /*
 GSM-modem SIM800l
-Copyright (c) 2023-24 GSB, Georgii Batanov gbatanov@yandex.ru
+Copyright (c) 2023-25 GSB, Georgii Batanov gbatanov@yandex.ru
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -122,6 +122,7 @@ func (mdm *GsmModem) Open(ctx context.Context) error {
 					answer := string(buff[2:])
 					log.Printf("Unexpected command: %s", answer)
 					if strings.HasPrefix(answer, "+CUSD") { // ответ на запрос баланса
+						log.Printf("Balance answer: %s", answer)
 						go func(msg string) {
 							mdm.showBalance(msg)
 						}(answer)
